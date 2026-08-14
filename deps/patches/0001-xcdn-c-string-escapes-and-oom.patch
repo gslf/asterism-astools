@@ -1,0 +1,285 @@
+diff --git a/src/ast.c b/src/ast.c
+index 0214524..f730019 100644
+--- a/src/ast.c
++++ b/src/ast.c
+@@ -21,13 +21,15 @@ static char *xcdn_strdup(const char *s) {
+ 
+ #define INITIAL_CAP 4
+ 
+-static void grow_ptr_array(void **ptr, size_t *cap, size_t elem_size) {
++/* Returns 1 on success; on allocation failure the array is unchanged and
++ * callers must not write past the old capacity. */
++static int grow_ptr_array(void **ptr, size_t *cap, size_t elem_size) {
+     size_t new_cap = (*cap == 0) ? INITIAL_CAP : (*cap * 2);
+     void *new_ptr = realloc(*ptr, new_cap * elem_size);
+-    if (new_ptr) {
+-        *ptr = new_ptr;
+-        *cap = new_cap;
+-    }
++    if (!new_ptr) return 0;
++    *ptr = new_ptr;
++    *cap = new_cap;
++    return 1;
+ }
+ 
+ /* ── Document ─────────────────────────────────────────────────────────── */
+@@ -40,9 +42,8 @@ xcdn_document_t *xcdn_document_new(void) {
+ void xcdn_document_push_value(xcdn_document_t *doc, xcdn_node_t *node) {
+     if (!doc || !node) return;
+     if (doc->values_len >= doc->values_cap) {
+-        grow_ptr_array((void **)&doc->values, &doc->values_cap,
+-                       sizeof(xcdn_node_t *));
+-    }
++        if (!grow_ptr_array((void **)&doc->values, &doc->values_cap,
++                       sizeof(xcdn_node_t *))) return;}
+     doc->values[doc->values_len++] = node;
+ }
+ 
+@@ -50,9 +51,8 @@ void xcdn_document_push_directive(xcdn_document_t *doc, const char *name,
+                                   xcdn_value_t *value) {
+     if (!doc) return;
+     if (doc->prolog_len >= doc->prolog_cap) {
+-        grow_ptr_array((void **)&doc->prolog, &doc->prolog_cap,
+-                       sizeof(xcdn_directive_t));
+-    }
++        if (!grow_ptr_array((void **)&doc->prolog, &doc->prolog_cap,
++                       sizeof(xcdn_directive_t))) return;}
+     xcdn_directive_t *d = &doc->prolog[doc->prolog_len++];
+     d->name = xcdn_strdup(name);
+     d->value = value;
+@@ -86,9 +86,8 @@ xcdn_node_t *xcdn_node_new(xcdn_value_t *value) {
+ void xcdn_node_add_tag(xcdn_node_t *node, const char *name) {
+     if (!node) return;
+     if (node->tags_len >= node->tags_cap) {
+-        grow_ptr_array((void **)&node->tags, &node->tags_cap,
+-                       sizeof(xcdn_tag_t));
+-    }
++        if (!grow_ptr_array((void **)&node->tags, &node->tags_cap,
++                       sizeof(xcdn_tag_t))) return;}
+     node->tags[node->tags_len].name = xcdn_strdup(name);
+     node->tags_len++;
+ }
+@@ -96,9 +95,8 @@ void xcdn_node_add_tag(xcdn_node_t *node, const char *name) {
+ void xcdn_node_add_annotation(xcdn_node_t *node, const char *name) {
+     if (!node) return;
+     if (node->annotations_len >= node->annotations_cap) {
+-        grow_ptr_array((void **)&node->annotations, &node->annotations_cap,
+-                       sizeof(xcdn_annotation_t));
+-    }
++        if (!grow_ptr_array((void **)&node->annotations, &node->annotations_cap,
++                       sizeof(xcdn_annotation_t))) return;}
+     xcdn_annotation_t *ann = &node->annotations[node->annotations_len];
+     memset(ann, 0, sizeof(*ann));
+     ann->name = xcdn_strdup(name);
+@@ -108,9 +106,8 @@ void xcdn_node_add_annotation(xcdn_node_t *node, const char *name) {
+ void xcdn_annotation_push_arg(xcdn_annotation_t *ann, xcdn_value_t *val) {
+     if (!ann || !val) return;
+     if (ann->args_len >= ann->args_cap) {
+-        grow_ptr_array((void **)&ann->args, &ann->args_cap,
+-                       sizeof(xcdn_value_t *));
+-    }
++        if (!grow_ptr_array((void **)&ann->args, &ann->args_cap,
++                       sizeof(xcdn_value_t *))) return;}
+     ann->args[ann->args_len++] = val;
+ }
+ 
+@@ -214,9 +211,8 @@ xcdn_value_t *xcdn_value_object(void) {
+ void xcdn_array_push(xcdn_value_t *arr, xcdn_node_t *node) {
+     if (!arr || arr->type != XCDN_VAL_ARRAY || !node) return;
+     if (arr->data.array.len >= arr->data.array.cap) {
+-        grow_ptr_array((void **)&arr->data.array.items, &arr->data.array.cap,
+-                       sizeof(xcdn_node_t *));
+-    }
++        if (!grow_ptr_array((void **)&arr->data.array.items, &arr->data.array.cap,
++                       sizeof(xcdn_node_t *))) return;}
+     arr->data.array.items[arr->data.array.len++] = node;
+ }
+ 
+@@ -247,9 +243,8 @@ void xcdn_object_set(xcdn_value_t *obj, const char *key, xcdn_node_t *node) {
+ 
+     /* Insert new entry */
+     if (obj->data.object.len >= obj->data.object.cap) {
+-        grow_ptr_array((void **)&obj->data.object.entries, &obj->data.object.cap,
+-                       sizeof(xcdn_object_entry_t));
+-    }
++        if (!grow_ptr_array((void **)&obj->data.object.entries, &obj->data.object.cap,
++                       sizeof(xcdn_object_entry_t))) return;}
+     xcdn_object_entry_t *e = &obj->data.object.entries[obj->data.object.len++];
+     e->key = xcdn_strdup(key);
+     e->node = node;
+diff --git a/src/lexer.c b/src/lexer.c
+index 8a7d7b7..fbf8708 100644
+--- a/src/lexer.c
++++ b/src/lexer.c
+@@ -191,15 +191,16 @@ static char *read_string(xcdn_lexer_t *lex, int triple, size_t *out_len,
+                 switch (e) {
+                     case '"':  strbuf_push(&sb, '"'); break;
+                     case '\\': strbuf_push(&sb, '\\'); break;
+-                    case '/':  strbuf_push(&sb, '\\'); strbuf_push(&sb, '/'); break;
+-                    case 'b':  strbuf_push(&sb, '\\'); strbuf_push(&sb, 'b'); break;
+-                    case 'f':  strbuf_push(&sb, '\\'); strbuf_push(&sb, 'f'); break;
+-                    case 'n':  strbuf_push(&sb, '\\'); strbuf_push(&sb, 'n'); break;
+-                    case 'r':  strbuf_push(&sb, '\\'); strbuf_push(&sb, 'r'); break;
+-                    case 't':  strbuf_push(&sb, '\\'); strbuf_push(&sb, 't'); break;
++                    case '/':  strbuf_push(&sb, '/'); break;
++                    case 'b':  strbuf_push(&sb, '\b'); break;
++                    case 'f':  strbuf_push(&sb, '\f'); break;
++                    case 'n':  strbuf_push(&sb, '\n'); break;
++                    case 'r':  strbuf_push(&sb, '\r'); break;
++                    case 't':  strbuf_push(&sb, '\t'); break;
+                     case 'u': {
+-                        strbuf_push(&sb, '\\');
+-                        strbuf_push(&sb, 'u');
++                        /* Decode \uXXXX (with surrogate pairs) to UTF-8 so
++                         * that parse inverts write_escaped_string. */
++                        unsigned long cp = 0;
+                         for (int i = 0; i < 4; i++) {
+                             int h = lex_bump(lex);
+                             if (h < 0 || !isxdigit((unsigned char)h)) {
+@@ -208,7 +209,55 @@ static char *read_string(xcdn_lexer_t *lex, int triple, size_t *out_len,
+                                     start_span, "invalid \\uXXXX escape");
+                                 return NULL;
+                             }
+-                            strbuf_push(&sb, (char)h);
++                            cp = cp * 16 +
++                                 (unsigned long)(isdigit(h) ? h - '0'
++                                                : tolower(h) - 'a' + 10);
++                        }
++                        if (cp >= 0xD800UL && cp <= 0xDBFFUL &&
++                            lex_peek(lex) == '\\' &&
++                            lex_peek_at(lex, 1) == 'u') {
++                            unsigned long lo = 0;
++                            int ok = 1;
++                            lex_bump(lex);
++                            lex_bump(lex);
++                            for (int i = 0; i < 4; i++) {
++                                int h = lex_bump(lex);
++                                if (h < 0 || !isxdigit((unsigned char)h)) {
++                                    ok = 0;
++                                    break;
++                                }
++                                lo = lo * 16 +
++                                     (unsigned long)(isdigit(h) ? h - '0'
++                                                    : tolower(h) - 'a' + 10);
++                            }
++                            if (!ok || lo < 0xDC00UL || lo > 0xDFFFUL) {
++                                strbuf_free(&sb);
++                                *err = xcdn_error_new(XCDN_ERR_INVALID_ESCAPE,
++                                    start_span, "invalid surrogate pair");
++                                return NULL;
++                            }
++                            cp = 0x10000UL + ((cp - 0xD800UL) << 10) +
++                                 (lo - 0xDC00UL);
++                        } else if (cp >= 0xD800UL && cp <= 0xDFFFUL) {
++                            strbuf_free(&sb);
++                            *err = xcdn_error_new(XCDN_ERR_INVALID_ESCAPE,
++                                start_span, "lone surrogate escape");
++                            return NULL;
++                        }
++                        if (cp < 0x80UL) {
++                            strbuf_push(&sb, (char)cp);
++                        } else if (cp < 0x800UL) {
++                            strbuf_push(&sb, (char)(0xC0 | (cp >> 6)));
++                            strbuf_push(&sb, (char)(0x80 | (cp & 0x3F)));
++                        } else if (cp < 0x10000UL) {
++                            strbuf_push(&sb, (char)(0xE0 | (cp >> 12)));
++                            strbuf_push(&sb, (char)(0x80 | ((cp >> 6) & 0x3F)));
++                            strbuf_push(&sb, (char)(0x80 | (cp & 0x3F)));
++                        } else {
++                            strbuf_push(&sb, (char)(0xF0 | (cp >> 18)));
++                            strbuf_push(&sb, (char)(0x80 | ((cp >> 12) & 0x3F)));
++                            strbuf_push(&sb, (char)(0x80 | ((cp >> 6) & 0x3F)));
++                            strbuf_push(&sb, (char)(0x80 | (cp & 0x3F)));
+                         }
+                         break;
+                     }
+diff --git a/src/parser.c b/src/parser.c
+index cc776d9..81ab3ea 100644
+--- a/src/parser.c
++++ b/src/parser.c
+@@ -88,10 +88,17 @@ static xcdn_span_t parser_span(const xcdn_lexer_t *lex) {
+ 
+ /* ── Parser state ─────────────────────────────────────────────────────── */
+ 
++/* Nesting cap: hostile input (e.g. a compromised astools tool emitting
++ * hundreds of thousands of '[') would otherwise overflow the C stack via
++ * the parse_value -> parse_object/array -> parse_node -> parse_value
++ * recursion. 512 is far beyond any legitimate document. */
++#define XCDN_MAX_DEPTH 512
++
+ typedef struct {
+     xcdn_lexer_t  lex;
+     xcdn_token_t  look;
+     int           has_look;
++    int           depth;
+     xcdn_error_t  err;
+ } parser_t;
+ 
+@@ -99,6 +106,7 @@ static void parser_init(parser_t *p, const char *src, size_t src_len) {
+     xcdn_lexer_init(&p->lex, src, src_len);
+     memset(&p->look, 0, sizeof(p->look));
+     p->has_look = 0;
++    p->depth = 0;
+     p->err = xcdn_error_none();
+ }
+ 
+@@ -181,11 +189,19 @@ static xcdn_value_t *parse_value(parser_t *p) {
+ 
+     switch (t.type) {
+         case XCDN_TOK_LBRACE:
+-            val = parse_object(p);
+-            break;
+-
+         case XCDN_TOK_LBRACKET:
+-            val = parse_array(p);
++            if (p->depth >= XCDN_MAX_DEPTH) {
++                xcdn_token_free(&t);
++                p->err = xcdn_error_new(XCDN_ERR_MESSAGE,
++                                        parser_span(&p->lex),
++                                        "nesting too deep (max %d)",
++                                        XCDN_MAX_DEPTH);
++                return NULL;
++            }
++            p->depth++;
++            val = (t.type == XCDN_TOK_LBRACE) ? parse_object(p)
++                                              : parse_array(p);
++            p->depth--;
+             break;
+ 
+         case XCDN_TOK_STRING:
+diff --git a/tests/test_lexer.c b/tests/test_lexer.c
+index 10bebbd..bcd6326 100644
+--- a/tests/test_lexer.c
++++ b/tests/test_lexer.c
+@@ -132,7 +132,7 @@ static void test_lex_strings(void) {
+ 
+     xcdn_token_t t1 = xcdn_lexer_next(&lex, &err);
+     ASSERT_EQ_INT(t1.type, XCDN_TOK_STRING, "string type");
+-    ASSERT_EQ_STR(t1.data.string_val.str, "hi\\n", "string with escape");
++    ASSERT_EQ_STR(t1.data.string_val.str, "hi\n", "string with escape");
+     xcdn_token_free(&t1);
+ 
+     xcdn_token_t t2 = xcdn_lexer_next(&lex, &err);
+@@ -256,11 +256,11 @@ static void test_lex_string_escapes(void) {
+     xcdn_token_free(&t);
+ 
+     t = xcdn_lexer_next(&lex, &err);
+-    ASSERT_EQ_STR(t.data.string_val.str, "tab\\there", "tab escape preserved");
++    ASSERT_EQ_STR(t.data.string_val.str, "tab\there", "tab escape decoded");
+     xcdn_token_free(&t);
+ 
+     t = xcdn_lexer_next(&lex, &err);
+-    ASSERT_EQ_STR(t.data.string_val.str, "newline\\nend", "newline escape preserved");
++    ASSERT_EQ_STR(t.data.string_val.str, "newline\nend", "newline escape decoded");
+     xcdn_token_free(&t);
+ }
+ 
+@@ -276,7 +276,7 @@ static void test_lex_unicode_escape(void) {
+     xcdn_token_t t = xcdn_lexer_next(&lex, &err);
+     ASSERT(!xcdn_error_is_set(&err), "no error");
+     ASSERT_EQ_INT(t.type, XCDN_TOK_STRING, "string type");
+-    ASSERT_EQ_STR(t.data.string_val.str, "\\u0041", "unicode escape preserved");
++    ASSERT_EQ_STR(t.data.string_val.str, "A", "unicode escape decoded");
+     xcdn_token_free(&t);
+ }
+ 

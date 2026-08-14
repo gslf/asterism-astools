@@ -53,3 +53,13 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Build trees
+build/
+build-*/
+
+# macOS
+.DS_Store
+
+# astools runtime state (dev workspaces)
+.astools/

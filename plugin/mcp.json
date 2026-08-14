@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "astools": {
+      "type": "stdio",
+      "command": "astools-mcp",
+      "args": ["--config", "${PLUGIN_DATA}/config.xcdn"],
+      "cwd": "${PLUGIN_DATA}"
+    }
+  }
+}

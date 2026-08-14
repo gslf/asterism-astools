@@ -1,0 +1,3 @@
+[submodule "deps/xcdn-c"]
+	path = deps/xcdn-c
+	url = https://github.com/gslf/xCDN-C.git

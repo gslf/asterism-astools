@@ -1,0 +1,226 @@
+// astools standard suite — edit (SPEC §8.5, A1): surgical text edits.
+// One busybox-style binary dispatched with `--tool edit`. Besides the
+// three release platforms, two extra dev entries (macos/x86_64,
+// linux/arm64) keep the tool available on every common dev machine.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "edit",
+  version: "1.0.0",
+  title: "Surgical text edits",
+  summary: "Replace, insert and patch text in workspace files, atomically.",
+  description: """
+    Targeted edits of UTF-8 text files: edit.replace swaps an exact (or
+    regex) match, edit.insert adds lines at a position, edit.patch applies
+    a unified diff. Prefer these over rewriting whole files with fs.write —
+    they fail loudly instead of clobbering. Every edit is written to a
+    temporary file and atomically renamed into place, and the dominant
+    line-ending style (LF or CRLF) of the file is preserved. Binary files
+    are refused with edit/binary.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "edit"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "edit"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "edit"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "edit"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "edit"] },
+    ],
+  },
+  permissions: {
+    fs: [ { path: "${workspace}", access: "read-write" } ],
+    net: false,
+    proc: false,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "replace",
+      summary: "Replace one exact occurrence of a string (or all of them).",
+      description: """
+        Replaces find with replace_with in the file. With all false (the
+        default) the file must contain exactly one occurrence: zero fails
+        with edit/not-found, two or more with edit/ambiguous (the count is
+        in the message). When ambiguous, extend find with surrounding
+        context until it is unique — do not switch to all true unless you
+        really mean every occurrence. With regex true, find is an
+        ERE-subset regex (no backreferences, no lookaround).
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read-write",
+                        must_exist: true },
+          required: true,
+          description: "Text file to edit, workspace-relative.",
+        },
+        #param {
+          name: "find",
+          type: #type { kind: "string", min_len: 1 },
+          required: true,
+          description: "Exact text (or regex when regex true) to replace.",
+        },
+        #param {
+          name: "replace_with",
+          type: #type { kind: "string" },
+          required: true,
+          description: "Replacement text; empty deletes the match.",
+        },
+        #param {
+          name: "all",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Replace every occurrence instead of exactly one.",
+        },
+        #param {
+          name: "regex",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Treat find as an ERE-subset regex.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "replacements", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Number of occurrences replaced." },
+          #param { name: "size", type: #type { kind: "integer" },
+                   required: true,
+                   description: "File size in bytes after the edit." },
+        ] },
+        description: "Replacement count and resulting file size.",
+      },
+      errors: [
+        { code: "edit/not-found",
+          description: "find occurs nowhere in the file." },
+        { code: "edit/ambiguous",
+          description: "all false, but find occurs more than once." },
+        { code: "edit/bad-pattern",
+          description: "regex true and find is not a valid regex." },
+        { code: "edit/binary", description: "The file is not UTF-8 text." },
+      ],
+      examples: [
+        #example {
+          title: "Bump a constant",
+          call: { path: "src/app.c", find: "int retries = 3;",
+                  replace_with: "int retries = 5;" },
+          result: { replacements: 1, size: 2054 },
+        },
+      ],
+    },
+
+    #command {
+      name: "insert",
+      summary: "Insert content at a 1-based line position in a text file.",
+      description: """
+        Inserts content as new line(s) before line `line`. line 0 prepends
+        at the top of the file; a line number past the end appends at the
+        bottom. Existing lines are never modified.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read-write",
+                        must_exist: true },
+          required: true,
+          description: "Text file to edit, workspace-relative.",
+        },
+        #param {
+          name: "line",
+          type: #type { kind: "integer", min: 0 },
+          required: true,
+          description: "Insertion point; 0 prepends, past-EOF appends.",
+        },
+        #param {
+          name: "content",
+          type: #type { kind: "string" },
+          required: true,
+          description: "Text to insert as its own line(s).",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "size", type: #type { kind: "integer" },
+                   required: true,
+                   description: "File size in bytes after the edit." },
+        ] },
+        description: "Resulting file size.",
+      },
+      errors: [
+        { code: "edit/binary", description: "The file is not UTF-8 text." },
+      ],
+      examples: [
+        #example {
+          title: "Prepend a todo item",
+          call: { path: "notes/todo.txt", line: 0,
+                  content: "- review manifests" },
+          result: { size: 42 },
+        },
+      ],
+    },
+
+    #command {
+      name: "patch",
+      summary: "Apply a unified diff to workspace files, all-or-nothing.",
+      description: """
+        Applies a standard unified diff. File paths inside the patch are
+        resolved workspace-relative after stripping `strip` leading
+        components (strip 1 turns a/src/main.c into src/main.c). If any
+        hunk fails to apply, the whole patch is rolled back and nothing on
+        disk changes — fix the diff and retry, do not re-apply partially.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "patch",
+          type: #type { kind: "string", min_len: 1 },
+          required: true,
+          description: "Unified diff text.",
+        },
+        #param {
+          name: "strip",
+          type: #type { kind: "integer", min: 0 },
+          default: 1,
+          description: "Path components stripped from diff headers.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "files_changed", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Files modified by the patch." },
+          #param { name: "hunks_applied", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Hunks applied across all files." },
+        ] },
+        description: "Patch application counters.",
+      },
+      errors: [
+        { code: "edit/patch-failed",
+          description: "A hunk did not apply; nothing was changed." },
+        { code: "edit/binary",
+          description: "A patched file is not UTF-8 text." },
+      ],
+      examples: [
+        #example {
+          title: "Apply a one-hunk diff",
+          call: { patch: "--- a/notes/todo.txt\n+++ b/notes/todo.txt\n@@ -1,2 +1,2 @@\n-- buy milk\n+- buy oat milk\n - ship v0.3\n",
+                  strip: 1 },
+          result: { files_changed: 1, hunks_applied: 1 },
+        },
+      ],
+    },
+
+  ],
+}

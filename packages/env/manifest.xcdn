@@ -1,0 +1,106 @@
+// astools standard suite — env (SPEC §8.7): environment variables.
+// One busybox-style binary dispatched with `--tool env`. Besides the
+// three release platforms, two extra dev entries (macos/x86_64,
+// linux/arm64) keep the tool available on every common dev machine.
+//
+// The manifest requests no variable names on purpose: which variables are
+// visible is decided entirely by the operator's grant list (grants.tools
+// env). Everything else reads as absent — never as an error — so the
+// tool cannot be used as an oracle for what exists in the environment.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "env",
+  version: "1.0.0",
+  title: "Environment variables",
+  summary: "Read environment variables the operator has explicitly granted.",
+  description: """
+    Reads environment variables, deny-by-default. Only variables named in
+    the operator's grant list are visible; any other variable reports
+    present false — absence is indistinguishable from "not granted", by
+    design. If a variable you need reads as absent, ask the user to grant
+    it; retrying will not change the answer.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "env"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "env"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "env"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "env"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "env"] },
+    ],
+  },
+  permissions: {
+    fs: [],
+    net: false,
+    proc: false,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "get",
+      summary: "Read one granted environment variable by name.",
+      annotations: { read_only: true },
+      params: [
+        #param {
+          name: "name",
+          type: #type { kind: "string", min_len: 1 },
+          required: true,
+          description: "Variable name, e.g. \"CI\".",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "name", type: #type { kind: "string" },
+                   required: true, description: "The queried name." },
+          #param { name: "present", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "False when unset or not granted." },
+          #param { name: "value", type: #type { kind: "string" },
+                   description: "The value; absent when present is false." },
+        ] },
+        description: "The variable's value, or present false.",
+      },
+      examples: [
+        #example {
+          call: { name: "CI" },
+          result: { name: "CI", present: true, value: "true" },
+        },
+      ],
+    },
+
+    #command {
+      name: "list",
+      summary: "List every granted environment variable with its value.",
+      annotations: { read_only: true },
+      params: [],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "vars",
+                   type: #type { kind: "map",
+                                 value: #type { kind: "string" } },
+                   required: true,
+                   description: "Granted variables that are set, by name." },
+        ] },
+        description: "Name-to-value map of the visible environment.",
+      },
+      examples: [
+        #example {
+          call: {},
+          result: { vars: { "LANG": "en_US.UTF-8",
+                            "TERM": "xterm-256color" } },
+        },
+      ],
+    },
+
+  ],
+}

@@ -1,0 +1,83 @@
+// astools standard suite — sys (SPEC §8.7): host system information.
+// One busybox-style binary dispatched with `--tool sys`. Besides the
+// three release platforms, two extra dev entries (macos/x86_64,
+// linux/arm64) keep the tool available on every common dev machine.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "sys",
+  version: "1.0.0",
+  title: "Host system information",
+  summary: "Report OS, architecture, CPU count, memory and astools version.",
+  description: """
+    One read-only command answering "what machine am I on?". Use it to
+    pick platform-appropriate behavior (path conventions, binary names)
+    or to size work to the host. It requests no permissions at all and is
+    always safe to call.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "sys"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "sys"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "sys"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "sys"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "sys"] },
+    ],
+  },
+  permissions: {
+    fs: [],
+    net: false,
+    proc: false,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "info",
+      summary: "Describe the host: OS, arch, CPUs, memory, astools version.",
+      annotations: { read_only: true },
+      params: [],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "os", type: #type { kind: "string" },
+                   required: true,
+                   description: "\"linux\", \"macos\" or \"windows\"." },
+          #param { name: "arch", type: #type { kind: "string" },
+                   required: true,
+                   description: "\"x86_64\" or \"arm64\"." },
+          #param { name: "hostname", type: #type { kind: "string" },
+                   required: true, description: "Host name." },
+          #param { name: "cpus", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Logical CPU count (at least 1)." },
+          #param { name: "memory_total_mb",
+                   type: #type { kind: "integer" },
+                   required: true,
+                   description: "Total physical memory in MiB." },
+          #param { name: "astools_version",
+                   type: #type { kind: "string" },
+                   required: true,
+                   description: "Version of the astools runtime." },
+        ] },
+        description: "Static facts about the host machine.",
+      },
+      examples: [
+        #example {
+          call: {},
+          result: { os: "macos", arch: "arm64", hostname: "devbox.local",
+                    cpus: 10, memory_total_mb: 32768,
+                    astools_version: "0.3.0" },
+        },
+      ],
+    },
+
+  ],
+}

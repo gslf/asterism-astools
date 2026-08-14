@@ -1,0 +1,467 @@
+// astools standard suite — git (SPEC §8.6, A1): local git operations.
+// One busybox-style binary dispatched with `--tool git`. Besides the
+// three release platforms, two extra dev entries (macos/x86_64,
+// linux/arm64) keep the tool available on every common dev machine.
+//
+// Wraps the system git binary with constructed argv (no shell); refs are
+// validated and passed after a literal "--". Requires the deny-by-default
+// `proc` operator grant, and git installed on the host.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "git",
+  version: "1.0.0",
+  title: "Local git operations",
+  summary: "Status, diff, log, show, add, commit and checkout in the repo.",
+  description: """
+    Local-only git for the workspace repository: inspect state with
+    git.status / git.diff / git.log / git.show, and change it with
+    git.add / git.commit / git.checkout. There is deliberately NO fetch,
+    pull, push, clone, reset or rebase — nothing that talks to a remote or
+    rewrites history. The tool is inert until the operator grants proc
+    (astools/denied = missing grant, do not retry), and reports
+    git/not-installed when the host has no git binary — both need user
+    action, not different calls. checkout refuses to discard uncommitted
+    changes (git/dirty): commit or clean up first.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "git"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "git"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "git"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "git"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "git"] },
+    ],
+  },
+  permissions: {
+    fs: [ { path: "${workspace}", access: "read-write" } ],
+    net: false,
+    proc: true,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "status",
+      summary: "Summarize branch state and staged/unstaged/untracked files.",
+      annotations: { read_only: true },
+      params: [],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "branch", type: #type { kind: "string" },
+                   required: true,
+                   description: "Current branch; empty when detached." },
+          #param { name: "detached", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when HEAD is detached." },
+          #param { name: "ahead", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Commits ahead of upstream (0 if none)." },
+          #param { name: "behind", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Commits behind upstream (0 if none)." },
+          #param {
+            name: "staged",
+            type: #type { kind: "array", item: #type { kind: "object",
+              fields: [
+                #param { name: "path", type: #type { kind: "string" },
+                         required: true,
+                         description: "Workspace-relative path." },
+                #param { name: "change", type: #type { kind: "string" },
+                         required: true,
+                         description: "added, modified, deleted, renamed." },
+              ] } },
+            required: true, description: "Changes staged for commit.",
+          },
+          #param {
+            name: "unstaged",
+            type: #type { kind: "array", item: #type { kind: "object",
+              fields: [
+                #param { name: "path", type: #type { kind: "string" },
+                         required: true,
+                         description: "Workspace-relative path." },
+                #param { name: "change", type: #type { kind: "string" },
+                         required: true,
+                         description: "modified or deleted." },
+              ] } },
+            required: true, description: "Changes not yet staged.",
+          },
+          #param { name: "untracked",
+                   type: #type { kind: "array",
+                                 item: #type { kind: "string" } },
+                   required: true,
+                   description: "Untracked files, workspace-relative." },
+          #param { name: "clean", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when nothing is changed or untracked." },
+        ] },
+        description: "Full working-tree status.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/failed", description: "git exited with an error." },
+      ],
+      examples: [
+        #example {
+          call: {},
+          result: { branch: "main", detached: false, ahead: 1, behind: 0,
+                    staged: [ { path: "src/app.c", change: "modified" } ],
+                    unstaged: [], untracked: ["notes/scratch.txt"],
+                    clean: false },
+        },
+      ],
+    },
+
+    #command {
+      name: "diff",
+      summary: "Show unstaged (or staged) changes as a unified diff.",
+      description: """
+        Renders the working-tree diff (or the index diff with staged
+        true), optionally limited to one path. The diff text is capped by
+        the output limit; truncated true means there is more than shown.
+      """,
+      annotations: { read_only: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read" },
+          description: "Limit the diff to this file or directory.",
+        },
+        #param {
+          name: "staged",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Diff the index (staged changes) instead.",
+        },
+        #param {
+          name: "context",
+          type: #type { kind: "integer", min: 0, max: 20 },
+          default: 3,
+          description: "Context lines per hunk.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "diff", type: #type { kind: "string" },
+                   required: true,
+                   description: "Unified diff; empty when no changes." },
+          #param { name: "truncated", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when the diff was cut at the cap." },
+        ] },
+        description: "Unified diff text.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/failed", description: "git exited with an error." },
+      ],
+      examples: [
+        #example {
+          call: { path: "src/app.c" },
+          result: { diff: "diff --git a/src/app.c b/src/app.c\n--- a/src/app.c\n+++ b/src/app.c\n@@ -10,7 +10,7 @@\n-  int retries = 3;\n+  int retries = 5;\n",
+                    truncated: false },
+        },
+      ],
+    },
+
+    #command {
+      name: "log",
+      summary: "List recent commits, optionally limited to one path.",
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param {
+          name: "max_count",
+          type: #type { kind: "integer", min: 1, max: 200 },
+          default: 20,
+          description: "Number of commits to return.",
+        },
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read" },
+          description: "Only commits touching this path.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param {
+            name: "commits",
+            type: #type { kind: "array", item: #type { kind: "object",
+              fields: [
+                #param { name: "hash", type: #type { kind: "string" },
+                         required: true, description: "Full commit hash." },
+                #param { name: "short_hash",
+                         type: #type { kind: "string" }, required: true,
+                         description: "Abbreviated hash." },
+                #param { name: "author", type: #type { kind: "string" },
+                         required: true,
+                         description: "Author name and email." },
+                #param { name: "date", type: #type { kind: "datetime" },
+                         required: true, description: "Author date, UTC." },
+                #param { name: "subject", type: #type { kind: "string" },
+                         required: true,
+                         description: "First line of the message." },
+              ] } },
+            required: true, description: "Newest first.",
+          },
+        ] },
+        description: "Commit list, newest first.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/failed", description: "git exited with an error." },
+      ],
+      examples: [
+        #example {
+          call: { max_count: 1 },
+          result: { commits: [ {
+                      hash: "f3a91c2e07b45d668a1f2b9c03e5d4a6b7c8d9e0",
+                      short_hash: "f3a91c2",
+                      author: "Ada Lovelace <ada@example.com>",
+                      date: t"2026-08-01T10:12:00Z",
+                      subject: "Fix retry count" } ] },
+        },
+      ],
+    },
+
+    #command {
+      name: "show",
+      summary: "Show a commit, or one file's content at a given ref.",
+      description: """
+        Two shapes: with path, returns that file's content at ref
+        ({content, size, truncated}); without path, returns the commit's
+        metadata and diff ({hash, author, date, subject, body, diff,
+        truncated}). Refs are validated before use; branch names, tags,
+        HEAD and hashes are accepted.
+      """,
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param {
+          name: "ref",
+          type: #type { kind: "string", min_len: 1 },
+          required: true,
+          description: "Commit-ish: hash, branch, tag or HEAD.",
+        },
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read" },
+          description: "Return this file's content at ref instead.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "hash", type: #type { kind: "string" },
+                   description: "Full hash (commit shape only)." },
+          #param { name: "author", type: #type { kind: "string" },
+                   description: "Author (commit shape only)." },
+          #param { name: "date", type: #type { kind: "datetime" },
+                   description: "Author date (commit shape only)." },
+          #param { name: "subject", type: #type { kind: "string" },
+                   description: "Message subject (commit shape only)." },
+          #param { name: "body", type: #type { kind: "string" },
+                   description: "Message body (commit shape only)." },
+          #param { name: "diff", type: #type { kind: "string" },
+                   description: "Commit diff (commit shape only)." },
+          #param { name: "content", type: #type { kind: "string" },
+                   description: "File content (path shape only)." },
+          #param { name: "size", type: #type { kind: "integer" },
+                   description: "File size in bytes (path shape only)." },
+          #param { name: "truncated", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when output was cut at the cap." },
+        ] },
+        description: "Commit metadata + diff, or file content at ref.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/bad-ref",
+          description: "ref is malformed or does not resolve." },
+        { code: "git/failed", description: "git exited with an error." },
+      ],
+      examples: [
+        #example {
+          title: "File content at HEAD",
+          call: { ref: "HEAD", path: "README.md" },
+          result: { content: "# app\n", size: 6, truncated: false },
+        },
+        #example {
+          title: "Commit metadata and diff",
+          call: { ref: "f3a91c2" },
+          result: { hash: "f3a91c2e07b45d668a1f2b9c03e5d4a6b7c8d9e0",
+                    author: "Ada Lovelace <ada@example.com>",
+                    date: t"2026-08-01T10:12:00Z",
+                    subject: "Fix retry count", body: "",
+                    diff: "diff --git a/src/app.c b/src/app.c\n@@ -10,7 +10,7 @@\n-  int retries = 3;\n+  int retries = 5;\n",
+                    truncated: false },
+        },
+      ],
+    },
+
+    #command {
+      name: "add",
+      summary: "Stage files for the next commit.",
+      params: [
+        #param {
+          name: "paths",
+          type: #type { kind: "array",
+                        item: #type { kind: "path",
+                                      access: "read-write" },
+                        min_items: 1 },
+          required: true,
+          description: "Files to stage (deleted files stage the removal).",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "added", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Number of paths staged." },
+        ] },
+        description: "Count of staged paths.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/failed", description: "git exited with an error." },
+      ],
+      examples: [
+        #example {
+          call: { paths: ["src/app.c"] },
+          result: { added: 1 },
+        },
+      ],
+    },
+
+    #command {
+      name: "commit",
+      summary: "Commit staged changes (or all tracked changes with all).",
+      description: """
+        Creates a commit from the index. With all true, tracked modified
+        and deleted files are staged automatically first (untracked files
+        still need git.add). Committing with an empty index fails with
+        git/failed rather than creating an empty commit.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "message",
+          type: #type { kind: "string", min_len: 1, max_len: 4096 },
+          required: true,
+          description: "Commit message; first line is the subject.",
+        },
+        #param {
+          name: "all",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Also stage tracked modifications (git commit -a).",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "hash", type: #type { kind: "string" },
+                   required: true, description: "Full commit hash." },
+          #param { name: "short_hash", type: #type { kind: "string" },
+                   required: true, description: "Abbreviated hash." },
+          #param { name: "files_changed", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Files in the commit." },
+        ] },
+        description: "The new commit's identity.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/failed",
+          description: "git refused (e.g. nothing staged, no identity)." },
+      ],
+      examples: [
+        #example {
+          call: { message: "Fix retry count" },
+          result: { hash: "f3a91c2e07b45d668a1f2b9c03e5d4a6b7c8d9e0",
+                    short_hash: "f3a91c2", files_changed: 1 },
+        },
+      ],
+    },
+
+    #command {
+      name: "checkout",
+      summary: "Switch to a branch or ref; create the branch with create.",
+      description: """
+        Checks out ref. With create true a new branch of that name is
+        created from HEAD first. Refuses to discard uncommitted changes:
+        a dirty working tree that would be overwritten fails with
+        git/dirty — commit, or clean up, then retry. Checking out a
+        non-branch ref leaves HEAD detached.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "ref",
+          type: #type { kind: "string", min_len: 1 },
+          required: true,
+          description: "Branch, tag or commit to check out.",
+        },
+        #param {
+          name: "create",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Create ref as a new branch first.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "branch", type: #type { kind: "string" },
+                   required: true,
+                   description: "Branch after checkout; empty if detached." },
+          #param { name: "detached", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when HEAD is now detached." },
+        ] },
+        description: "Resulting HEAD state.",
+      },
+      errors: [
+        { code: "git/not-installed",
+          description: "No git binary on the host (user action needed)." },
+        { code: "git/not-a-repo",
+          description: "The workspace is not a git repository." },
+        { code: "git/bad-ref",
+          description: "ref is malformed or does not resolve." },
+        { code: "git/dirty",
+          description: "Uncommitted changes would be discarded." },
+        { code: "git/conflict",
+          description: "Checkout could not merge local changes." },
+        { code: "git/failed", description: "git exited with an error." },
+      ],
+      examples: [
+        #example {
+          call: { ref: "feature/retries", create: true },
+          result: { branch: "feature/retries", detached: false },
+        },
+      ],
+    },
+
+  ],
+}

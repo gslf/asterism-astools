@@ -1,0 +1,469 @@
+// astools standard suite — fs (SPEC §8.1): files in the workspace.
+// The package ships one busybox-style binary; every entry dispatches it
+// with `--tool fs`. Besides the three release platforms, two extra dev
+// entries (macos/x86_64, linux/arm64) keep the tool available on every
+// common development machine.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "fs",
+  version: "1.0.0",
+  title: "Files in the workspace",
+  summary: "Read, write, list, stat, copy, move and delete workspace files.",
+  description: """
+    Filesystem primitives scoped to the workspace. Use fs.read to inspect a
+    file, fs.list to discover what exists, fs.stat for metadata, and
+    fs.write / fs.mkdir / fs.remove / fs.move / fs.copy to change things.
+    Paths are workspace-relative; absolute paths must fall inside a granted
+    prefix. Prefer grep.search over reading many files wholesale, and
+    prefer the edit tool over rewriting existing files with fs.write.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "fs"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "fs"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "fs"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "fs"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "fs"] },
+    ],
+  },
+  permissions: {
+    fs: [ { path: "${workspace}", access: "read-write" } ],
+    net: false,
+    proc: false,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "read",
+      summary: "Read a file, optionally from an offset, as utf8 or base64.",
+      description: """
+        Returns up to max_bytes bytes of the file starting at offset. Ask
+        for encoding "base64" when the file is (or may be) binary. When
+        truncated is true, repeat the call with a higher offset to page
+        through the rest of the file.
+      """,
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read", must_exist: true },
+          required: true,
+          description: "File to read, workspace-relative.",
+        },
+        #param {
+          name: "offset",
+          type: #type { kind: "integer", min: 0 },
+          default: 0,
+          description: "Byte offset to start reading at.",
+        },
+        #param {
+          name: "max_bytes",
+          type: #type { kind: "integer", min: 1 },
+          default: 65536,
+          description: "Maximum number of bytes to return.",
+        },
+        #param {
+          name: "encoding",
+          type: #type { kind: "enum", values: ["utf8", "base64"] },
+          default: "utf8",
+          description: "Encoding of the returned content.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "content", type: #type { kind: "string" },
+                   required: true,
+                   description: "File content in the requested encoding." },
+          #param { name: "size", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Total file size in bytes." },
+          #param { name: "truncated", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when the read stopped at max_bytes." },
+        ] },
+        description: "File content plus total size and a truncation flag.",
+      },
+      errors: [
+        { code: "fs/not-found", description: "The file does not exist." },
+        { code: "fs/is-dir", description: "The path is a directory." },
+        { code: "fs/io", description: "The operating system refused the read." },
+      ],
+      examples: [
+        #example {
+          title: "Read a text file",
+          call: { path: "notes/todo.txt" },
+          result: { content: "- buy milk\n- ship v0.3\n", size: 23,
+                    truncated: false },
+        },
+      ],
+    },
+
+    #command {
+      name: "write",
+      summary: "Write content to a file; by default refuses to overwrite.",
+      description: """
+        Writes content to path. The default mode "create" fails with
+        fs/exists when the file is already there — that guard is
+        intentional; pass mode "overwrite" only when replacing the file is
+        the actual intent, or "append" to add to it. Missing parent
+        directories are not created: call fs.mkdir first. For binary data
+        send base64 content with encoding "base64". Prefer the edit tool
+        for changing parts of an existing text file.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "write" },
+          required: true,
+          description: "Destination file, workspace-relative.",
+        },
+        #param {
+          name: "content",
+          type: #type { kind: "string" },
+          required: true,
+          description: "Content to write, in the given encoding.",
+        },
+        #param {
+          name: "mode",
+          type: #type { kind: "enum", values: ["create", "overwrite",
+                                               "append"] },
+          default: "create",
+          description: "create fails if the file exists; append adds to it.",
+        },
+        #param {
+          name: "encoding",
+          type: #type { kind: "enum", values: ["utf8", "base64"] },
+          default: "utf8",
+          description: "Encoding of content.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "bytes_written", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Number of bytes written to disk." },
+        ] },
+        description: "Byte count actually written.",
+      },
+      errors: [
+        { code: "fs/exists",
+          description: "mode create, but the file already exists." },
+        { code: "fs/is-dir", description: "The path is a directory." },
+        { code: "fs/not-found",
+          description: "A parent directory is missing." },
+        { code: "fs/io", description: "The operating system refused the write." },
+      ],
+      examples: [
+        #example {
+          title: "Create a new file",
+          call: { path: "notes/draft.md", content: "# Draft\n" },
+          result: { bytes_written: 8 },
+        },
+      ],
+    },
+
+    #command {
+      name: "list",
+      summary: "List directory entries, optionally recursive and filtered.",
+      description: """
+        Lists the entries of a directory. With recursive true it walks the
+        whole subtree; glob filters entry names with shell-style wildcards
+        (* ? […], matched against the name unless the pattern contains /).
+        Listing stops at max_entries with truncated true.
+      """,
+      annotations: { read_only: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read" },
+          required: true,
+          description: "Directory to list, workspace-relative.",
+        },
+        #param {
+          name: "recursive",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Walk subdirectories too.",
+        },
+        #param {
+          name: "glob",
+          type: #type { kind: "string", min_len: 1 },
+          description: "Optional wildcard filter, e.g. \"*.c\".",
+        },
+        #param {
+          name: "max_entries",
+          type: #type { kind: "integer", min: 1 },
+          default: 1000,
+          description: "Stop after this many entries.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param {
+            name: "entries",
+            type: #type { kind: "array", item: #type { kind: "object",
+              fields: [
+                #param { name: "name", type: #type { kind: "string" },
+                         required: true,
+                         description: "Entry name relative to path." },
+                #param { name: "type",
+                         type: #type { kind: "enum",
+                                       values: ["file", "dir", "symlink",
+                                                "other"] },
+                         required: true,
+                         description: "Entry kind." },
+                #param { name: "size", type: #type { kind: "integer" },
+                         required: true,
+                         description: "Size in bytes (0 for directories)." },
+                #param { name: "modified",
+                         type: #type { kind: "datetime" },
+                         required: true,
+                         description: "Last modification time, UTC." },
+              ] } },
+            required: true,
+            description: "Directory entries in on-disk order.",
+          },
+          #param { name: "truncated", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when max_entries cut the listing." },
+        ] },
+        description: "Entries with type, size and mtime, plus truncation.",
+      },
+      errors: [
+        { code: "fs/not-found", description: "The directory does not exist." },
+        { code: "fs/io", description: "The operating system refused the listing." },
+      ],
+      examples: [
+        #example {
+          title: "List C sources",
+          call: { path: "src", glob: "*.c" },
+          result: { entries: [ { name: "main.c", type: "file", size: 2048,
+                                 modified: t"2026-08-01T09:30:00Z" } ],
+                    truncated: false },
+        },
+      ],
+    },
+
+    #command {
+      name: "stat",
+      summary: "Report type, size, mtime and writability of one path.",
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read", must_exist: true },
+          required: true,
+          description: "Path to inspect, workspace-relative.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "type",
+                   type: #type { kind: "enum",
+                                 values: ["file", "dir", "symlink",
+                                          "other"] },
+                   required: true, description: "Entry kind." },
+          #param { name: "size", type: #type { kind: "integer" },
+                   required: true, description: "Size in bytes." },
+          #param { name: "modified", type: #type { kind: "datetime" },
+                   required: true,
+                   description: "Last modification time, UTC." },
+          #param { name: "readonly", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when not writable (best effort)." },
+        ] },
+        description: "Metadata of the path.",
+      },
+      errors: [
+        { code: "fs/not-found", description: "The path does not exist." },
+        { code: "fs/io", description: "The operating system refused the stat." },
+      ],
+      examples: [
+        #example {
+          call: { path: "README.md" },
+          result: { type: "file", size: 1204,
+                    modified: t"2026-07-28T14:02:11Z", readonly: false },
+        },
+      ],
+    },
+
+    #command {
+      name: "mkdir",
+      summary: "Create a directory, with missing parents by default.",
+      annotations: { idempotent: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "write" },
+          required: true,
+          description: "Directory to create, workspace-relative.",
+        },
+        #param {
+          name: "parents",
+          type: #type { kind: "boolean" },
+          default: true,
+          description: "Create missing parent directories too.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "created", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "False when the directory already existed." },
+        ] },
+        description: "Whether anything was actually created.",
+      },
+      errors: [
+        { code: "fs/exists",
+          description: "The path exists and is not a directory." },
+        { code: "fs/not-found",
+          description: "parents false and a parent is missing." },
+        { code: "fs/io", description: "The operating system refused the mkdir." },
+      ],
+      examples: [
+        #example {
+          call: { path: "build/out" },
+          result: { created: true },
+        },
+      ],
+    },
+
+    #command {
+      name: "remove",
+      summary: "Delete a file, or a directory tree with recursive true.",
+      description: """
+        Deletes path. A non-empty directory is refused with fs/not-empty
+        unless recursive is true — deleting a whole tree must always be an
+        explicit choice.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "write", must_exist: true },
+          required: true,
+          description: "Path to delete, workspace-relative.",
+        },
+        #param {
+          name: "recursive",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Required to delete a non-empty directory.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "removed", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when the path was deleted." },
+        ] },
+        description: "Deletion outcome.",
+      },
+      errors: [
+        { code: "fs/not-found", description: "The path does not exist." },
+        { code: "fs/not-empty",
+          description: "Non-empty directory without recursive true." },
+        { code: "fs/io", description: "The operating system refused the delete." },
+      ],
+      examples: [
+        #example {
+          call: { path: "build/out", recursive: true },
+          result: { removed: true },
+        },
+      ],
+    },
+
+    #command {
+      name: "move",
+      summary: "Move or rename a file or directory inside the workspace.",
+      annotations: { destructive: true },
+      params: [
+        #param {
+          name: "src",
+          type: #type { kind: "path", access: "write", must_exist: true },
+          required: true,
+          description: "Existing source path.",
+        },
+        #param {
+          name: "dst",
+          type: #type { kind: "path", access: "write" },
+          required: true,
+          description: "Destination path.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [] },
+        description: "Empty object on success.",
+      },
+      errors: [
+        { code: "fs/not-found", description: "The source does not exist." },
+        { code: "fs/exists", description: "The destination already exists." },
+        { code: "fs/io", description: "The operating system refused the move." },
+      ],
+      examples: [
+        #example {
+          call: { src: "notes/draft.md", dst: "docs/draft.md" },
+          result: {},
+        },
+      ],
+    },
+
+    #command {
+      name: "copy",
+      summary: "Copy a file, or a directory tree with recursive true.",
+      params: [
+        #param {
+          name: "src",
+          type: #type { kind: "path", access: "read", must_exist: true },
+          required: true,
+          description: "Existing source path.",
+        },
+        #param {
+          name: "dst",
+          type: #type { kind: "path", access: "write" },
+          required: true,
+          description: "Destination path.",
+        },
+        #param {
+          name: "recursive",
+          type: #type { kind: "boolean" },
+          default: false,
+          description: "Required to copy a directory.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "bytes_copied", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Total bytes copied." },
+        ] },
+        description: "Total byte count copied.",
+      },
+      errors: [
+        { code: "fs/not-found", description: "The source does not exist." },
+        { code: "fs/exists", description: "The destination already exists." },
+        { code: "fs/is-dir",
+          description: "The source is a directory and recursive is false." },
+        { code: "fs/io", description: "The operating system refused the copy." },
+      ],
+      examples: [
+        #example {
+          call: { src: "config.xcdn", dst: "backup/config.xcdn" },
+          result: { bytes_copied: 412 },
+        },
+      ],
+    },
+
+  ],
+}

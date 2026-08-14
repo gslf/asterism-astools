@@ -1,0 +1,128 @@
+// astools standard suite — proc (SPEC §8.7): run programs.
+// One busybox-style binary dispatched with `--tool proc`. Besides the
+// three release platforms, two extra dev entries (macos/x86_64,
+// linux/arm64) keep the tool available on every common dev machine.
+//
+// proc requests the deny-by-default `proc` capability: without an
+// explicit operator grant every call is denied in pre-flight. The fs read
+// request on ${workspace} exists solely so the optional cwd path argument
+// can be canonicalized and grant-checked (§6.4).
+
+#astools_tool {
+  manifest_version: 1,
+  id: "proc",
+  version: "1.0.0",
+  title: "Run programs",
+  summary: "Run a program directly (no shell) under the sandbox; off by default.",
+  description: """
+    Executes one program with an explicit argv — there is NO shell, so
+    pipes, globs, redirection and $VAR expansion do not work; pass each
+    flag as its own argv element. The child runs inside the invocation
+    sandbox with a scrubbed environment and is killed at the deadline.
+    stdout and stderr are captured with caps. This capability is off by
+    default: astools/denied means the operator has not granted proc —
+    that is policy, not a bug, and retrying will not help.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "proc"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "proc"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "proc"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "proc"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "proc"] },
+    ],
+  },
+  permissions: {
+    fs: [ { path: "${workspace}", access: "read" } ],
+    net: false,
+    proc: true,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "run",
+      summary: "Execute argv directly and capture exit code and output.",
+      description: """
+        Spawns argv[0] with the given arguments and waits for it to exit.
+        cwd defaults to the private scratch directory; set it (workspace-
+        relative) to run inside the project. stdin, when given, is piped
+        to the child and then closed. env adds variables on top of the
+        scrubbed base environment. timeout kills the child early; it still
+        counts as a result (negative exit_code = terminating signal), not
+        an error. Output is captured up to the runtime caps and flagged
+        via stdout_truncated / stderr_truncated.
+      """,
+      annotations: { destructive: true, long_running: true },
+      params: [
+        #param {
+          name: "argv",
+          type: #type { kind: "array",
+                        item: #type { kind: "string", min_len: 1 },
+                        min_items: 1 },
+          required: true,
+          description: "Program and arguments; argv[0] is the executable.",
+        },
+        #param {
+          name: "cwd",
+          type: #type { kind: "path", access: "read" },
+          description: "Working directory; default is the scratch dir.",
+        },
+        #param {
+          name: "stdin",
+          type: #type { kind: "string" },
+          description: "Content piped to the child's stdin.",
+        },
+        #param {
+          name: "env",
+          type: #type { kind: "map", value: #type { kind: "string" } },
+          description: "Extra environment variables for the child.",
+        },
+        #param {
+          name: "timeout",
+          type: #type { kind: "duration" },
+          description: "Kill deadline; defaults to the invocation timeout.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param { name: "exit_code", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Exit status; negative = killed by signal." },
+          #param { name: "stdout", type: #type { kind: "string" },
+                   required: true, description: "Captured standard output." },
+          #param { name: "stderr", type: #type { kind: "string" },
+                   required: true, description: "Captured standard error." },
+          #param { name: "stdout_truncated",
+                   type: #type { kind: "boolean" }, required: true,
+                   description: "True when the stdout cap was hit." },
+          #param { name: "stderr_truncated",
+                   type: #type { kind: "boolean" }, required: true,
+                   description: "True when the stderr cap was hit." },
+          #param { name: "duration", type: #type { kind: "duration" },
+                   required: true,
+                   description: "Wall-clock run time of the child." },
+        ] },
+        description: "Exit status and captured output of the program.",
+      },
+      examples: [
+        #example {
+          title: "List a directory without a shell",
+          call: { argv: ["ls", "-1"], cwd: "src" },
+          result: { exit_code: 0, stdout: "app.c\nmain.c\nutil.c\n",
+                    stderr: "", stdout_truncated: false,
+                    stderr_truncated: false, duration: r"PT1S" },
+        },
+      ],
+    },
+
+  ],
+}

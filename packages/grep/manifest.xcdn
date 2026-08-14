@@ -1,0 +1,185 @@
+// astools standard suite — grep (SPEC §8.4, A1): search file contents.
+// One busybox-style binary dispatched with `--tool grep`. Besides the
+// three release platforms, two extra dev entries (macos/x86_64,
+// linux/arm64) keep the tool available on every common dev machine.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "grep",
+  version: "1.0.0",
+  title: "Search file contents",
+  summary: "Search workspace files for a pattern; matching lines, in context.",
+  description: """
+    Line-based content search across the workspace. Reach for grep.search
+    before reading files wholesale with fs.read: it tells you where things
+    are, cheaply. Patterns use an in-house linear-time ERE subset —
+    literals, ., […], [^…], ^, $, *, +, ?, {m,n}, alternation | and groups
+    () — with NO backreferences and NO lookaround. Set regex false to
+    search for the literal text instead. Binary files (NUL in the first
+    4 KiB) and files over max_file_bytes are skipped and counted in
+    files_skipped. Matched line text is capped at 512 bytes with a marker.
+    Result paths are workspace-relative.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: {
+    mode: "oneshot",
+    entry: [
+      { os: "linux", arch: "x86_64",
+        argv: ["bin/linux-x86_64/astools-std", "--tool", "grep"] },
+      { os: "macos", arch: "arm64",
+        argv: ["bin/macos-arm64/astools-std", "--tool", "grep"] },
+      { os: "windows", arch: "x86_64",
+        argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "grep"] },
+      { os: "macos", arch: "x86_64",
+        argv: ["bin/macos-x86_64/astools-std", "--tool", "grep"] },
+      { os: "linux", arch: "arm64",
+        argv: ["bin/linux-arm64/astools-std", "--tool", "grep"] },
+    ],
+  },
+  permissions: {
+    fs: [ { path: "${workspace}", access: "read" } ],
+    net: false,
+    proc: false,
+    env: [],
+  },
+  commands: [
+
+    #command {
+      name: "search",
+      summary: "Find lines matching a regex or literal under a directory.",
+      description: """
+        Searches path (a file or a directory; directories are walked when
+        recursive is true) for pattern. Use glob to restrict which files
+        are searched, e.g. "*.c". context adds up to 10 lines before and
+        after each match. The search stops at max_results with truncated
+        true — narrow the pattern or the path instead of raising the limit
+        first.
+      """,
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param {
+          name: "pattern",
+          type: #type { kind: "string", min_len: 1 },
+          required: true,
+          description: "ERE-subset regex (or literal text when regex false).",
+        },
+        #param {
+          name: "path",
+          type: #type { kind: "path", access: "read" },
+          default: ".",
+          description: "File or directory to search, workspace-relative.",
+        },
+        #param {
+          name: "regex",
+          type: #type { kind: "boolean" },
+          default: true,
+          description: "False treats pattern as literal text.",
+        },
+        #param {
+          name: "case_sensitive",
+          type: #type { kind: "boolean" },
+          default: true,
+          description: "False folds ASCII case.",
+        },
+        #param {
+          name: "glob",
+          type: #type { kind: "string", min_len: 1 },
+          description: "Optional wildcard filter on file names, e.g. \"*.h\".",
+        },
+        #param {
+          name: "recursive",
+          type: #type { kind: "boolean" },
+          default: true,
+          description: "Walk subdirectories of path.",
+        },
+        #param {
+          name: "context",
+          type: #type { kind: "integer", min: 0, max: 10 },
+          default: 0,
+          description: "Lines of context before and after each match.",
+        },
+        #param {
+          name: "max_results",
+          type: #type { kind: "integer", min: 1, max: 1000 },
+          default: 200,
+          description: "Stop after this many matches.",
+        },
+        #param {
+          name: "max_file_bytes",
+          type: #type { kind: "integer", min: 1 },
+          default: 1048576,
+          description: "Skip files larger than this many bytes.",
+        },
+      ],
+      returns: {
+        type: #type { kind: "object", fields: [
+          #param {
+            name: "matches",
+            type: #type { kind: "array", item: #type { kind: "object",
+              fields: [
+                #param { name: "path", type: #type { kind: "string" },
+                         required: true,
+                         description: "Workspace-relative file path." },
+                #param { name: "line", type: #type { kind: "integer" },
+                         required: true,
+                         description: "1-based line number of the match." },
+                #param { name: "column", type: #type { kind: "integer" },
+                         required: true,
+                         description: "1-based byte column of the match." },
+                #param { name: "text", type: #type { kind: "string" },
+                         required: true,
+                         description: "Matched line, capped at 512 bytes." },
+                #param { name: "before",
+                         type: #type { kind: "array",
+                                       item: #type { kind: "string" } },
+                         description: "Context lines before (context > 0)." },
+                #param { name: "after",
+                         type: #type { kind: "array",
+                                       item: #type { kind: "string" } },
+                         description: "Context lines after (context > 0)." },
+              ] } },
+            required: true,
+            description: "Matches in file-walk order.",
+          },
+          #param { name: "files_searched", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Files actually scanned." },
+          #param { name: "files_skipped", type: #type { kind: "integer" },
+                   required: true,
+                   description: "Binary or oversized files skipped." },
+          #param { name: "truncated", type: #type { kind: "boolean" },
+                   required: true,
+                   description: "True when max_results cut the search." },
+        ] },
+        description: "Matches plus search coverage counters.",
+      },
+      errors: [
+        { code: "grep/bad-pattern",
+          description: "The pattern is not a valid ERE-subset regex." },
+      ],
+      examples: [
+        #example {
+          title: "Find TODO markers in the sources",
+          call: { pattern: "TODO", path: "src" },
+          result: { matches: [ { path: "src/main.c", line: 42, column: 6,
+                                 text: "  /* TODO: handle EINTR */" } ],
+                    files_searched: 12, files_skipped: 1,
+                    truncated: false },
+        },
+        #example {
+          title: "Regex with context lines",
+          call: { pattern: "retries? = [0-9]+", path: "src", glob: "*.c",
+                  context: 1 },
+          result: { matches: [ { path: "src/app.c", line: 10, column: 7,
+                                 text: "  int retries = 3;",
+                                 before: ["static void connect(void) {"],
+                                 after: ["  int backoff_ms = 100;"] } ],
+                    files_searched: 8, files_skipped: 0,
+                    truncated: false },
+        },
+      ],
+    },
+
+  ],
+}
