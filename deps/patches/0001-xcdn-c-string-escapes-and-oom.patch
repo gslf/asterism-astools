@@ -194,7 +194,7 @@ index 8a7d7b7..fbf8708 100644
                          break;
                      }
 diff --git a/src/parser.c b/src/parser.c
-index cc776d9..81ab3ea 100644
+index cc776d9..53ca34c 100644
 --- a/src/parser.c
 +++ b/src/parser.c
 @@ -88,10 +88,17 @@ static xcdn_span_t parser_span(const xcdn_lexer_t *lex) {
@@ -247,6 +247,20 @@ index cc776d9..81ab3ea 100644
              break;
  
          case XCDN_TOK_STRING:
+@@ -667,6 +683,13 @@ xcdn_document_t *xcdn_parse_str(const char *src, size_t src_len,
+     parser_t p;
+     parser_init(&p, src, src_len);
+     xcdn_document_t *doc = parse_document(&p);
++    /* A buffered lookahead token can still own heap memory (string/ident/
++     * decimal/...) when parsing errors out; free it so malformed input
++     * never leaks. */
++    if (p.has_look) {
++        xcdn_token_free(&p.look);
++        p.has_look = 0;
++    }
+     if (xcdn_error_is_set(&p.err)) {
+         if (err) *err = p.err;
+         xcdn_document_free(doc);
 diff --git a/tests/test_lexer.c b/tests/test_lexer.c
 index 10bebbd..bcd6326 100644
 --- a/tests/test_lexer.c

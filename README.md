@@ -36,6 +36,8 @@ ctest --test-dir build
 Requires CMake ≥ 3.16 and a C99 toolchain. The only dependency is the
 [xCDN-C](https://github.com/gslf/xCDN-C) submodule; the MCP JSON codec is
 in-house. `libastools` performs no network I/O and links no networking code.
+CMake applies four local xCDN-C fixes at configure time (idempotent,
+self-detecting) — see [docs/XCDN-MODS.md](docs/XCDN-MODS.md).
 
 Options: `ASTOOLS_BUILD_MCP` / `ASTOOLS_BUILD_STD` / `ASTOOLS_BUILD_CHECK` /
 `ASTOOLS_BUILD_TESTS` / `ASTOOLS_BUILD_PLUGIN` (ON), `ASTOOLS_BUILD_NET` /
