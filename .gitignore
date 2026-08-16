@@ -61,5 +61,10 @@ build-*/
 # macOS
 .DS_Store
 
+# AI Tools
+.claude/
+.codex/
+.agents/
+
 # astools runtime state (dev workspaces)
 .astools/

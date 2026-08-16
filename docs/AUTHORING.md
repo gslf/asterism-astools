@@ -1,8 +1,6 @@
 # Authoring an astools tool
 
-A tool is a directory. Everything the runtime and the model need to know
-about it lives in one file, `manifest.xcdn`. This guide walks through
-building a tool from scratch; `docs/SPEC.md` is the binding reference and
+A tool is a directory. Everything the runtime and the model need to know about it lives in one file, `manifest.xcdn`. This guide walks through building a tool from scratch. The `docs/SPEC.md` is the binding reference and
 `packages/fs/manifest.xcdn` is a complete worked example.
 
 ## 1. Layout
@@ -21,10 +19,8 @@ Install = copy the directory into a registry root. Remove = delete it.
 
 ## 2. The protocol (oneshot)
 
-Your executable is started once per invocation. It reads exactly one
-`#tool_request` from stdin, does the work, writes exactly one
-`#tool_response` to stdout, and exits. stderr is yours for logging (the
-runtime captures a bounded amount of it).
+Your executable is started once per invocation. It reads exactly one `#tool_request` from stdin, does the work, writes exactly one
+`#tool_response` to stdout, and exits. stderr is yours for logging (the runtime captures a bounded amount of it).
 
 ```xcdn
 #tool_request {
@@ -53,14 +49,10 @@ Reply with either:
 
 Rules that keep you honest:
 
-- **Trust the args.** The runtime already type-checked them, injected the
-  defaults, and canonicalized every `path`-typed value to an absolute path
-  inside the granted prefixes. Never re-interpret relative paths.
+- **Trust the args.** The runtime already type-checked them, injected the defaults, and canonicalized every `path`-typed value to an absolute path inside the granted prefixes. Never re-interpret relative paths.
 - **stdout is sacred.** Only the response goes there. Diagnostics → stderr.
-- **Respect the deadline.** At the deadline your whole process group is
-  killed; a graceful early error beats a corpse.
-- **Stay under `limits.max_output_bytes`.** An oversized response is
-  treated as a malfunction (`astools/overflow`), not truncated.
+- **Respect the deadline.** At the deadline your whole process group is killed; a graceful early error beats a corpse.
+- **Stay under `limits.max_output_bytes`.** An oversized response is treated as a malfunction (`astools/overflow`), not truncated.
 - Your cwd is a private scratch directory; it disappears after the call.
 
 ## 3. Writing the manifest
@@ -98,27 +90,14 @@ Per command, invest in three things — they are what the model actually
 reads:
 
 1. **`summary`** — one sharp line.
-2. **`examples`** — at least one `#example { call, result }` with realistic
-   values. Catalogs render the first one as a `CALL` line; it teaches the
-   syntax by showing it.
-3. **Types.** Type filesystem inputs as `path` (never `string`) — that is
-   the hook that lets the policy engine check them. Use `enum` instead of
-   documenting magic strings. Constrain sizes (`max_bytes`, `max_items`):
-   the validator enforces them for free.
+2. **`examples`** — at least one `#example { call, result }` with realistic values. Catalogs render the first one as a `CALL` line; it teaches the syntax by showing it.
+3. **Types.** Type filesystem inputs as `path` (never `string`), that is the hook that lets the policy engine check them. Use `enum` instead of documenting magic strings. Constrain sizes (`max_bytes`, `max_items`): the validator enforces them for free.
 
-Annotations (`read_only`, `destructive`, `idempotent`, `long_running`)
-drive catalog markers and MCP hints; set them truthfully. Declare your
-error codes (`mytool/<slug>`) so they render into the docs.
+Annotations (`read_only`, `destructive`, `idempotent`, `long_running`) drive catalog markers and MCP hints; set them truthfully. Declare your error codes (`mytool/<slug>`) so they render into the docs.
 
 ## 4. Permissions are requests
 
-The manifest asks; only the host grants. Request the narrowest set that
-works — `${workspace}` read-write is the norm for file tools, `proc` and
-`net` are deny-by-default and should be requested only when the tool's
-whole point is spawning programs or reaching the network. If your tool
-runs without a grant it requested, fail early with a clear tool error;
-the runtime already denies invocations that require an ungranted `proc`
-or `net`.
+The manifest asks; only the host grants. Request the narrowest set that works,`${workspace}` read-write is the norm for file tools, `proc` and `net` are deny-by-default and should be requested only when the tool's whole point is spawning programs or reaching the network. If your tool runs without a grant it requested, fail early with a clear tool error. The runtime already denies invocations that require an ungranted `proc` or `net`.
 
 ## 5. Check, approve, iterate
 
@@ -128,7 +107,4 @@ astools-check --catalog --root <root> # what the model will see
 astools-check --approve mytool --root <root>   # record lockfile hashes
 ```
 
-Versioning discipline (§3.7): within a major version, only add — new
-commands, new optional params, widened constraints. Removing/renaming
-anything, adding a required param, or narrowing a type is a major bump.
-Mark commands `deprecated: true` for at least one minor release first.
+Versioning discipline: within a major version, only add new commands, new optional params, widened constraints. Removing/renaming anything, adding a required param, or narrowing a type is also a major bump. Mark commands `deprecated: true` for at least one minor release first.

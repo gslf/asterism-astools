@@ -25,7 +25,7 @@ cmake --build build -j
 ctest --test-dir build
 ```
 
-Requires CMake ≥ 3.16 and a C99 toolchain. The only dependency is the [xCDN-C](https://github.com/gslf/xCDN-C) submodule; the MCP JSON codec is in-house. `libastools` performs no network I/O and links no networking code. The pinned xCDN-C revision includes the parser and allocation hardening required by astools.
+Requires CMake ≥ 3.16 and a C99 toolchain. The only dependency is the [xCDN-C](https://github.com/gslf/xCDN-C) submodule.
 
 Options: `ASTOOLS_BUILD_MCP` / `ASTOOLS_BUILD_STD` / `ASTOOLS_BUILD_CHECK` / `ASTOOLS_BUILD_TESTS` / `ASTOOLS_BUILD_PLUGIN` (ON), `ASTOOLS_BUILD_NET` / `ASTOOLS_NO_THREADS` / `ASTOOLS_SANITIZERS` (OFF).
 
@@ -64,10 +64,6 @@ astools_invoke(c, "fs", "read", "{path: \"notes/todo.txt\"}", 0, &r);
 
 Deny by default: a manifest *requests* permissions, only the host *grants* them, and the effective set is the intersection. Every executable tool runs as a child process with a scrubbed environment, a private scratch cwd, a wall-clock deadline, and output caps; `path`-typed arguments are canonicalized and checked against the grants before anything spawns. The `strict` sandbox level adds kernel enforcement where the platform provides it (Seatbelt on macOS), and `astools_get_sandbox_caps` reports honestly what is actually enforced.
 
-## Status
-
-v0.3 (spec: `docs/SPEC.md`). POSIX-first: macOS and Linux build and test; the Windows backend is stubbed honestly (`ASTOOLS_ERR_UNSUPPORTED`).
 
 ## License
-
-MIT.
+MIT [LICENSE](LICENSE).
