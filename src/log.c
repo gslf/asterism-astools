@@ -1,6 +1,6 @@
 /*
  * log.c — leveled rotating file log + host callback fan-out + audit trail
- * (§16).
+ *.
  *
  * Sink independence: the file sink is gated by cfg.log_level; the host
  * callback receives EVERY record at any level and filters on its own. The
@@ -188,7 +188,7 @@ void astools_log(astools_ctx *c, int level, const char *subsys,
   free(line_heap);
 }
 
-/* ---- audit trail (§16) --------------------------------------------------- */
+/* ---- audit trail --------------------------------------------------- */
 
 /* Append s as the body of an xCDN double-quoted string, escaping quote,
  * backslash and control characters. tool/version/command/error come from
@@ -224,7 +224,7 @@ static astools_err audit_append_str(astools_err e, astools_buf *b,
 }
 
 /* One #invocation record appended to <config_dir>/audit.xcdn. Append-only,
- * never rotated; args are hashed, not stored (§16). Never fails the
+ * never rotated; args are hashed, not stored. Never fails the
  * caller. */
 void astools_audit_append(astools_ctx *c, const char *tool,
                           const char *version, const char *command, bool ok,

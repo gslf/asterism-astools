@@ -1,6 +1,6 @@
 /*
- * test_catalog.c — catalog.c: deterministic budgeted rendering (§7.1,
- * §17). Two manifest-only packages (dummy package-relative binaries —
+ * test_catalog.c — catalog.c: deterministic budgeted rendering. Two
+ * manifest-only packages (dummy package-relative binaries —
  * catalog never invokes; availability only needs a platform entry).
  */
 
@@ -103,7 +103,7 @@ TEST(ordering_by_id_ascending) {
 }
 
 TEST(priority_override_reorders) {
-  /* catalog.priority lists tools first, then id ascending (§7.1) */
+  /* catalog.priority lists tools first, then id ascending */
   cat_fx f;
   char *out = NULL;
   const char *pa, *pz;

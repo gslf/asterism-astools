@@ -1,6 +1,6 @@
 /*
  * test_lockfile.c — lockfile.c: load/check/approve + pinning "enforce"
- * (§4.4, §17).
+ *.
  */
 
 #include "astools_test.h"
@@ -12,7 +12,7 @@
  * parsed manifest, and a lockfile path in its own dir. */
 typedef struct {
   char root_raw[256], lock_raw[256];
-  char pkg_dir[512], lock_path[512], manifest_path[512], artifact[512];
+  char pkg_dir[512], lock_path[512], manifest_path[1024], artifact[1024];
   astools_manifest *m;
 } lk_fx;
 
@@ -34,7 +34,7 @@ static int lk_setup(lk_fx *f) {
   char *text;
   size_t len = 0;
   char *err = NULL;
-  char bin_dir[512];
+  char bin_dir[1024];
 
   memset(f, 0, sizeof *f);
   if (!astools_test_tmpdir(f->root_raw) || !astools_test_tmpdir(f->lock_raw))
@@ -192,7 +192,7 @@ TEST(missing_entry_is_unlisted) {
 }
 
 TEST(enforce_blocks_resolve_until_approved) {
-  /* §4.4: pinning "enforce" + no lockfile entry => tool disabled; resolve
+  /* Pinning "enforce" + no lockfile entry => tool disabled; resolve
    * yields DENIED; astools_tool_approve unblocks it. */
   lk_fx f;
   char ws_raw[256], cfg_path[512];
@@ -200,6 +200,7 @@ TEST(enforce_blocks_resolve_until_approved) {
   astools_ctx *c = NULL;
   astools_tool *t = NULL;
   astools_err e;
+  int changed = 0;
   FILE *fp;
 
   if (!lk_setup(&f) || !astools_test_tmpdir(ws_raw)) {
@@ -254,7 +255,18 @@ TEST(enforce_blocks_resolve_until_approved) {
     goto out;
   }
   ASSERT_EQ_INT(t->lock_state, ASTOOLS_LOCK_OK);
+  ASSERT_OK(astools_registry_revalidate(c, t));
+  if (!append_file(f.artifact, "TAMPER")) {
+    ASTOOLS_FAILF("artifact tamper failed");
+    astools_tool_unref(t);
+    goto out;
+  }
+  ASSERT_ERR(astools_registry_revalidate(c, t), ASTOOLS_ERR_DENIED);
   astools_tool_unref(t);
+  ASSERT_OK(astools_registry_scan(c, &changed));
+  ASSERT_EQ_INT(changed, 1);
+  t = NULL;
+  ASSERT_ERR(astools_registry_resolve(c, "lk", &t), ASTOOLS_ERR_DENIED);
 
 out:
   if (c) astools_close(c);

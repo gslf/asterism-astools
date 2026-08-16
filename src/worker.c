@@ -1,11 +1,11 @@
 /*
- * worker.c — execution backends and supervision (§5.2–§5.4, §9): slot
+ * worker.c — execution backends and supervision: slot
  * admission, oneshot exec, persistent process table, library vtables,
  * supervisor thread, async tasks.
  *
  * Containment invariants: a child is always reaped (never leaked), stdout
  * is capped at max_output_bytes (overflow kills, never truncates and
- * continues), stderr keeps the newest bytes (§5.6), every loop polls the
+ * continues), stderr keeps the newest bytes, every loop polls the
  * cancel flag and the monotonic deadline. Tool output is hostile input:
  * nothing from a pipe is trusted until proto.c has validated it.
  */
@@ -60,7 +60,7 @@ static void worker_sleep_ms(int64_t ms) {
 }
 
 /* Append to the stderr capture keeping the NEWEST bytes: when the cap is
- * exceeded the oldest half is discarded (§5.6). Best effort: OOM drops. */
+ * exceeded the oldest half is discarded. Best effort: OOM drops. */
 static void stderr_append(astools_buf *b, const char *data, size_t n,
                           int64_t cap_bytes) {
   size_t cap = cap_bytes > 0 ? (size_t)cap_bytes : (size_t)262144;
@@ -129,7 +129,7 @@ void astools_slot_release(astools_ctx *c) {
   os_mutex_unlock(&c->slot_mu);
 }
 
-/* ---- oneshot execution (§5.2) -------------------------------------------- */
+/* ---- oneshot execution -------------------------------------------- */
 
 enum {
   ONE_RUNNING = 0,
@@ -140,6 +140,15 @@ enum {
   ONE_NOMEM
 };
 
+static int task_cancelled(astools_task *t) {
+  int cancelled;
+  if (!t) return 0;
+  os_mutex_lock(&t->mu);
+  cancelled = t->cancelled ? 1 : 0;
+  os_mutex_unlock(&t->mu);
+  return cancelled;
+}
+
 astools_err astools_exec_oneshot(astools_ctx *c,
                                  const astools_sandbox_setup *setup,
                                  const char *request_text,
@@ -147,7 +156,7 @@ astools_err astools_exec_oneshot(astools_ctx *c,
                                  int64_t deadline_mono,
                                  int64_t max_output_bytes,
                                  int64_t stderr_max_bytes,
-                                 volatile int *cancel_flag,
+                                 astools_task *cancel_task,
                                  astools_result *r, int *exit_code,
                                  char **stderr_cap) {
   os_spawn_opts o;
@@ -199,7 +208,7 @@ astools_err astools_exec_oneshot(astools_ctx *c,
     int want_write;
     int64_t slice;
     now = astools_mono(c);
-    if (cancel_flag && *cancel_flag) {
+    if (task_cancelled(cancel_task)) {
       status = ONE_CANCEL;
       break;
     }
@@ -286,6 +295,10 @@ astools_err astools_exec_oneshot(astools_ctx *c,
            got > 0)
       stderr_append(&errb, tmp, got, stderr_max_bytes);
   }
+  /* A well-behaved oneshot exits without descendants.  If it deliberately
+   * orphaned any, the process group can outlive its reaped leader; never let
+   * those processes escape merely because the response was well formed. */
+  os_proc_kill(&p);
   os_proc_free(&p);
 
   switch (status) {
@@ -354,16 +367,14 @@ astools_err astools_exec_oneshot(astools_ctx *c,
   return verdict;
 }
 
-/* ---- persistent-process / library table (§5.3, §5.4) --------------------- */
+/* ---- persistent-process / library table --------------------- */
 
 #define PP_KIND_PROC 0
 #define PP_KIND_LIB 1
 
-/* One node of the c->pprocs chained list (guarded by c->pp_mu). The busy
- * count pins a node against the idle reaper; io_mu serializes the whole
- * write+read exchange with one process (parallel=1 semantics — pipelining
- * for manifests with parallel > 1 is future work; admission is still
- * bounded by the invocation slots). */
+/* One member of a keyed persistent pool (guarded by c->pp_mu). The busy
+ * count pins it against the idle reaper; io_mu preserves ordered exchanges
+ * on its stream. A pool grows to the manifest's parallel limit. */
 struct astools_pproc {
   int kind;  /* PP_KIND_* */
   char *key; /* proc: "id@version"; lib: package dir */
@@ -391,14 +402,25 @@ static void pp_node_free(astools_pproc *p) {
   free(p);
 }
 
-/* Find-or-create + pin under pp_mu. Returned node stays valid until the
- * matching pp_release: the reaper skips busy nodes. */
-static astools_pproc *pp_acquire(astools_ctx *c, int kind, const char *key) {
-  astools_pproc *p;
+/* Find the least-busy member of a keyed pool, or grow that pool up to the
+ * manifest's parallel limit. Returned nodes stay pinned until pp_release;
+ * the reaper skips busy nodes. Each stream remains strictly ordered. */
+static astools_pproc *pp_acquire(astools_ctx *c, int kind, const char *key,
+                                 int max_instances) {
+  astools_pproc *p, *best = NULL;
+  int count = 0;
+  if (max_instances < 1) max_instances = 1;
   os_mutex_lock(&c->pp_mu);
-  for (p = c->pprocs; p; p = p->next)
-    if (p->kind == kind && strcmp(p->key, key) == 0) break;
-  if (!p) {
+  for (p = c->pprocs; p; p = p->next) {
+    if (p->kind != kind || strcmp(p->key, key) != 0) continue;
+    count++;
+    if (!best || p->busy < best->busy) best = p;
+  }
+  /* Each process still speaks the simple ordered line protocol.  A pool
+   * supplies the manifest's advertised parallelism without multiplexing
+   * responses on a single stream or serializing every call on one io_mu. */
+  p = best;
+  if (!p || (kind == PP_KIND_PROC && p->busy > 0 && count < max_instances)) {
     p = calloc(1, sizeof *p);
     if (p) {
       p->kind = kind;
@@ -451,7 +473,7 @@ static void pp_stop(astools_ctx *c, astools_pproc *p, bool graceful) {
   astools_buf_init(&p->pending);
 }
 
-/* Crash/kill backoff: 1s doubling to 30s (§5.3). */
+/* Crash/kill backoff: 1s doubling to 30s. */
 static void pp_backoff(astools_ctx *c, astools_pproc *p) {
   p->backoff_ms = p->backoff_ms > 0 ? p->backoff_ms * 2 : 1000;
   if (p->backoff_ms > 30000) p->backoff_ms = 30000;
@@ -479,11 +501,11 @@ static char *pp_take_line(astools_buf *b, size_t *out_len) {
 enum { PP_WHY_NONE = 0, PP_WHY_EOF, PP_WHY_OVERFLOW };
 
 /* Read one complete line from the child's stdout (compact responses are
- * single lines, D3). ASTOOLS_ERR_TOOL distinguishes crash vs flood via
+ * single lines). ASTOOLS_ERR_TOOL distinguishes crash vs flood via
  * *why. Stderr is drained and dropped to keep the child from blocking. */
 static astools_err pp_read_line(astools_ctx *c, astools_pproc *p,
                                 int64_t deadline_mono,
-                                volatile int *cancel_flag, char **out_line,
+                                astools_task *cancel_task, char **out_line,
                                 size_t *out_len, int *why) {
   int64_t cap = c->cfg.max_output_bytes > 0 ? c->cfg.max_output_bytes + 4096
                                             : (int64_t)1048576;
@@ -498,7 +520,7 @@ static astools_err pp_read_line(astools_ctx *c, astools_pproc *p,
       *out_line = line;
       return ASTOOLS_OK;
     }
-    if (cancel_flag && *cancel_flag) return ASTOOLS_ERR_CANCELLED;
+    if (task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     now = astools_mono(c);
     if (now >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
     slice = deadline_mono - now;
@@ -543,7 +565,7 @@ static astools_err pp_read_line(astools_ctx *c, astools_pproc *p,
 /* Write text (+ terminating newline when missing) to the child's stdin. */
 static astools_err pp_write_all(astools_ctx *c, astools_pproc *p,
                                 const char *text, int64_t deadline_mono,
-                                volatile int *cancel_flag, int *why) {
+                                astools_task *cancel_task, int *why) {
   size_t len = strlen(text), off = 0;
   int nl_done = (len > 0 && text[len - 1] == '\n');
   int64_t cap = c->cfg.max_output_bytes > 0 ? c->cfg.max_output_bytes + 4096
@@ -552,7 +574,7 @@ static astools_err pp_write_all(astools_ctx *c, astools_pproc *p,
   while (off < len || !nl_done) {
     unsigned ready = 0;
     int64_t now, slice;
-    if (cancel_flag && *cancel_flag) return ASTOOLS_ERR_CANCELLED;
+    if (task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     now = astools_mono(c);
     if (now >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
     slice = deadline_mono - now;
@@ -610,7 +632,7 @@ static astools_err pp_write_all(astools_ctx *c, astools_pproc *p,
 static astools_err pp_ensure_alive(astools_ctx *c, const astools_tool *t,
                                    const astools_sandbox_setup *setup,
                                    astools_pproc *p, int64_t deadline_mono,
-                                   volatile int *cancel_flag,
+                                   astools_task *cancel_task,
                                    astools_result *r) {
   os_spawn_opts o;
   astools_err e;
@@ -621,7 +643,7 @@ static astools_err pp_ensure_alive(astools_ctx *c, const astools_tool *t,
   for (;;) {
     int64_t now = astools_mono(c), wait;
     if (p->next_restart_mono <= now) break;
-    if (cancel_flag && *cancel_flag) {
+    if (task_cancelled(cancel_task)) {
       result_set(r, "astools/cancelled", "invocation cancelled");
       return astools_seterr(c, ASTOOLS_ERR_CANCELLED,
                             "invocation cancelled");
@@ -665,7 +687,7 @@ static astools_err pp_ensure_alive(astools_ctx *c, const astools_tool *t,
     char *line = NULL;
     size_t llen = 0;
     int why = 0;
-    e = pp_read_line(c, p, hello_deadline, cancel_flag, &line, &llen, &why);
+    e = pp_read_line(c, p, hello_deadline, cancel_task, &line, &llen, &why);
     if (e == ASTOOLS_OK) {
       char *emsg = NULL;
       if (astools_proto_parse_hello(line, llen, t, &emsg) != ASTOOLS_OK) {
@@ -706,7 +728,7 @@ static astools_err pp_ensure_alive(astools_ctx *c, const astools_tool *t,
   }
 }
 
-/* Cancel protocol (§5.3): #tool_cancel, 2s grace for an acknowledging
+/* Cancel protocol: #tool_cancel, 2s grace for an acknowledging
  * response, then kill + backoff. Keeps the process when it acknowledged. */
 static void pp_cancel_and_settle(astools_ctx *c, astools_pproc *p,
                                  const char *invocation_id) {
@@ -751,7 +773,7 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t,
                                     const char *request_text,
                                     const char *invocation_id,
                                     int64_t deadline_mono,
-                                    volatile int *cancel_flag,
+                                    astools_task *cancel_task,
                                     astools_result *r) {
   char key[160];
   astools_pproc *p;
@@ -761,19 +783,20 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t,
     return ASTOOLS_ERR_INVALID;
   memset(r, 0, sizeof *r);
   snprintf(key, sizeof key, "%s@%s", t->m->id, t->m->version);
-  p = pp_acquire(c, PP_KIND_PROC, key);
+  p = pp_acquire(c, PP_KIND_PROC, key,
+                 t->m->parallel > 0 ? t->m->parallel : 1);
   if (!p)
     return astools_seterr(c, ASTOOLS_ERR_NOMEM,
                           "cannot allocate persistent-process entry");
   os_mutex_lock(&p->io_mu);
   p->idle_timeout_ms = t->m->idle_timeout_ms;
 
-  e = pp_ensure_alive(c, t, setup, p, deadline_mono, cancel_flag, r);
+  e = pp_ensure_alive(c, t, setup, p, deadline_mono, cancel_task, r);
   if (e != ASTOOLS_OK) goto out;
 
   {
     int why = 0;
-    e = pp_write_all(c, p, request_text, deadline_mono, cancel_flag, &why);
+    e = pp_write_all(c, p, request_text, deadline_mono, cancel_task, &why);
     if (e == ASTOOLS_ERR_TIMEOUT || e == ASTOOLS_ERR_CANCELLED) {
       pp_cancel_and_settle(c, p, invocation_id);
       if (e == ASTOOLS_ERR_TIMEOUT) {
@@ -803,7 +826,7 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t,
     char *line = NULL;
     size_t llen = 0;
     int why = 0;
-    e = pp_read_line(c, p, deadline_mono, cancel_flag, &line, &llen, &why);
+    e = pp_read_line(c, p, deadline_mono, cancel_task, &line, &llen, &why);
     if (e == ASTOOLS_OK) {
       char *rid = NULL, *perr = NULL;
       astools_err pe =
@@ -866,7 +889,7 @@ out:
   return e;
 }
 
-/* ---- library dispatch (§5.4) --------------------------------------------- */
+/* ---- library dispatch --------------------------------------------- */
 
 astools_err astools_exec_library(astools_ctx *c, astools_tool *t,
                                  const char *request_text,
@@ -878,7 +901,7 @@ astools_err astools_exec_library(astools_ctx *c, astools_tool *t,
 
   if (!c || !t || !request_text || !r) return ASTOOLS_ERR_INVALID;
   memset(r, 0, sizeof *r);
-  p = pp_acquire(c, PP_KIND_LIB, t->pkg_dir);
+  p = pp_acquire(c, PP_KIND_LIB, t->pkg_dir, 1);
   if (!p)
     return astools_seterr(c, ASTOOLS_ERR_NOMEM,
                           "cannot allocate library entry");
@@ -983,7 +1006,7 @@ astools_err astools_exec_library(astools_ctx *c, astools_tool *t,
   return e;
 }
 
-/* ---- supervisor (§9) ------------------------------------------------------ */
+/* ---- supervisor ------------------------------------------------------ */
 
 /* One pass of background work: registry poll + idle persistent reaping. */
 static void worker_pass(astools_ctx *c) {
@@ -1068,7 +1091,7 @@ void astools_worker_stop(astools_ctx *c) {
     os_thread_join(&c->worker);
     c->worker_running = false;
   }
-  /* No invocations are in flight at close (§10); drain the table. */
+  /* No invocations are in flight at close; drain the table. */
   os_mutex_lock(&c->pp_mu);
   p = c->pprocs;
   c->pprocs = NULL;
@@ -1093,27 +1116,19 @@ astools_err astools_worker_tick(astools_ctx *c) {
 
 /* ---- async tasks (astools_invoke_async) ----------------------------------- */
 
-/* The public astools_task is the first member so the handle converts to
- * the private struct and back (C guarantees the addresses coincide). The
- * extra member is the volatile cancel flag polled by the exec loops. */
-typedef struct {
-  astools_task t;
-  volatile int cancel;
-} astools_task_priv;
-
 #if !defined(ASTOOLS_NO_THREADS)
 static void *task_main(void *arg) {
-  astools_task_priv *p = arg;
+  astools_task *t = arg;
   astools_result res;
   astools_err v =
-      astools_invoke_impl(p->t.c, p->t.ref, p->t.command, p->t.args,
-                          p->t.deadline_ms, &p->cancel, &res);
-  os_mutex_lock(&p->t.mu);
-  p->t.result = res;
-  p->t.verdict = v;
-  p->t.done = true;
-  os_cond_broadcast(&p->t.cv);
-  os_mutex_unlock(&p->t.mu);
+      astools_invoke_impl(t->c, t->ref, t->command, t->args,
+                          t->deadline_ms, t, &res);
+  os_mutex_lock(&t->mu);
+  t->result = res;
+  t->verdict = v;
+  t->done = true;
+  os_cond_broadcast(&t->cv);
+  os_mutex_unlock(&t->mu);
   return NULL;
 }
 #endif
@@ -1135,35 +1150,35 @@ astools_err astools_invoke_async(astools_ctx *c, const char *ref,
                           "async invocation is unavailable in "
                           "no-thread mode");
   {
-    astools_task_priv *p = calloc(1, sizeof *p);
+    astools_task *t = calloc(1, sizeof *t);
     astools_err e;
-    if (!p) return ASTOOLS_ERR_NOMEM;
-    p->t.c = c;
-    p->t.ref = astools_strdup(ref);
-    p->t.command = astools_strdup(command);
-    p->t.args = astools_strdup(args_xcdn); /* NULL-safe */
-    p->t.deadline_ms = deadline_ms;
-    os_mutex_init(&p->t.mu);
-    os_cond_init(&p->t.cv);
-    if (!p->t.ref || !p->t.command || (args_xcdn && !p->t.args)) {
+    if (!t) return ASTOOLS_ERR_NOMEM;
+    t->c = c;
+    t->ref = astools_strdup(ref);
+    t->command = astools_strdup(command);
+    t->args = astools_strdup(args_xcdn); /* NULL-safe */
+    t->deadline_ms = deadline_ms;
+    os_mutex_init(&t->mu);
+    os_cond_init(&t->cv);
+    if (!t->ref || !t->command || (args_xcdn && !t->args)) {
       e = ASTOOLS_ERR_NOMEM;
       goto fail;
     }
-    e = os_thread_start(&p->t.thread, task_main, p);
+    e = os_thread_start(&t->thread, task_main, t);
     if (e != ASTOOLS_OK) {
       (void)astools_seterr(c, e, "cannot start invocation thread");
       goto fail;
     }
-    p->t.thread_valid = true;
-    *out = &p->t;
+    t->thread_valid = true;
+    *out = t;
     return ASTOOLS_OK;
   fail:
-    os_mutex_destroy(&p->t.mu);
-    os_cond_destroy(&p->t.cv);
-    free(p->t.ref);
-    free(p->t.command);
-    free(p->t.args);
-    free(p);
+    os_mutex_destroy(&t->mu);
+    os_cond_destroy(&t->cv);
+    free(t->ref);
+    free(t->command);
+    free(t->args);
+    free(t);
     return e;
   }
 #endif
@@ -1198,9 +1213,7 @@ astools_err astools_task_wait(astools_task *t, uint32_t timeout_ms,
 }
 
 astools_err astools_task_cancel(astools_task *t) {
-  astools_task_priv *p = (astools_task_priv *)t;
   if (!t) return ASTOOLS_ERR_INVALID;
-  p->cancel = 1;
   os_mutex_lock(&t->mu);
   t->cancelled = true;
   os_mutex_unlock(&t->mu);
@@ -1208,9 +1221,10 @@ astools_err astools_task_cancel(astools_task *t) {
 }
 
 void astools_task_free(astools_task *t) {
-  astools_task_priv *p = (astools_task_priv *)t;
   if (!t) return;
-  p->cancel = 1; /* unblock a still-running invocation */
+  os_mutex_lock(&t->mu);
+  t->cancelled = true; /* unblock a still-running invocation */
+  os_mutex_unlock(&t->mu);
   if (t->thread_valid) {
     os_thread_join(&t->thread);
     t->thread_valid = false;
@@ -1223,5 +1237,5 @@ void astools_task_free(astools_task *t) {
   free(t->result.error_message);
   os_mutex_destroy(&t->mu);
   os_cond_destroy(&t->cv);
-  free(p);
+  free(t);
 }

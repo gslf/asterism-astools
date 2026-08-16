@@ -1,7 +1,7 @@
 /*
- * test_jscm.c — jscm.c: JSON Schema generation + MCP description (§7.4,
- * §17). The exact-string compare over a command with EVERY kind
- * represented doubles as the §17 golden: any drift in the deterministic
+ * test_jscm.c — jscm.c: JSON Schema generation + MCP description. The
+ * exact-string compare over a command with EVERY kind
+ * represented doubles as the golden: any drift in the deterministic
  * rendering breaks this test on purpose.
  */
 
@@ -71,7 +71,7 @@ static const char ALL_KINDS_MANIFEST[] =
 
 /* Golden: fixed key order (type/enum, description, default, constraints,
  * then items/properties), "required" always present, additionalProperties
- * false on closed objects (§7.4). */
+ * false on closed objects. */
 static const char GOLDEN_SCHEMA[] =
     "{\"type\":\"object\","
     "\"properties\":{"
@@ -186,7 +186,7 @@ TEST(schema_empty_params) {
 
 TEST(mcp_description_composed) {
   /* Composed description: tool summary + command bits + rendered example
-   * + permission note (§7.4). Substring checks — the golden above pins
+   * + permission note. Substring checks — the golden above pins
    * the byte-exact schema; the description just has to carry the parts. */
   astools_manifest *m = parse_fixture();
   astools_tool t;

@@ -4,7 +4,7 @@
  * three CLOEXEC pipes with rlimits and a private process group, dlopen.
  *
  * macOS is the primary target; the file also compiles on Linux. Known
- * divergences (§14): os_exe_path uses _NSGetExecutablePath vs
+ * divergences: os_exe_path uses _NSGetExecutablePath vs
  * /proc/self/exe, and RLIMIT_AS is best effort on macOS. SIGPIPE from
  * stdin writes is contained per-thread (block, write, consume the pending
  * signal, restore) so a broken pipe can never kill the host process and
@@ -399,7 +399,7 @@ static int child_limits(const os_spawn_opts *o) {
       child_one_limit(RLIMIT_CPU, o->limit_cpu_seconds) != 0)
     return -1;
 #ifdef RLIMIT_AS
-  /* Best effort: RLIMIT_AS is unreliable on macOS (§14). */
+  /* Best effort: RLIMIT_AS is unreliable on macOS. */
   if (o->limit_mem_bytes > 0)
     (void)child_one_limit(RLIMIT_AS, o->limit_mem_bytes);
 #endif
@@ -468,6 +468,7 @@ astools_err os_proc_spawn(const os_spawn_opts *o, os_proc *p) {
   }
 
   p->pid = (int64_t)child;
+  p->pgid = (int64_t)child;
   p->handle = 0;
   p->pgroup = 1;
   p->fd_in = in_pipe[1];
@@ -652,9 +653,15 @@ void os_proc_close_stdin(os_proc *p) {
 static void proc_signal(os_proc *p, int sig) {
   pid_t pid;
 
-  if (!p || p->pid <= 0) return; /* never kill(-1)/kill(0) */
+  if (!p) return;
+  if (p->pgroup && p->pgid > 0) {
+    /* The leader may already have been reaped while descendants still keep
+     * the group alive.  Retaining pgid lets the runtime clean that tail. */
+    (void)kill(-(pid_t)p->pgid, sig);
+    return;
+  }
+  if (p->pid <= 0) return; /* never kill(-1)/kill(0) */
   pid = (pid_t)p->pid;
-  if (p->pgroup && kill(-pid, sig) == 0) return;
   (void)kill(pid, sig);
 }
 
@@ -716,6 +723,7 @@ void os_proc_free(os_proc *p) {
   fd_close(&p->fd_in);
   fd_close(&p->fd_out);
   fd_close(&p->fd_err);
+  p->pgid = 0;
 }
 
 /* ---- dynamic libraries --------------------------------------------------- */

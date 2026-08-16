@@ -1,6 +1,5 @@
 /*
- * tool_edit.c — edit.replace / edit.insert / edit.patch (SPEC §8.5, A1,
- * D15).
+ * tool_edit.c — edit.replace / edit.insert / edit.patch.
  *
  * Common behavior: the target is read whole; a NUL byte in the first
  * 4 KiB means edit/binary. Content is normalized to LF for editing; the
@@ -31,6 +30,7 @@
  */
 
 #ifndef _WIN32
+#define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
 #endif
@@ -690,7 +690,7 @@ static int under_prefix(const char *path, const char *prefix) {
   return path[pl] == '\0' || path[pl] == '/' || (pl == 1 && prefix[0] == '/');
 }
 
-/* Symlink-safe containment (SPEC §8.5 / §6.4): the patch target path lives
+/* Symlink-safe containment: the patch target path lives
  * inside the diff text, so the runtime pre-flight never saw it. Resolve it
  * through the kernel (deepest existing ancestor + verbatim remainder) and
  * require the real path to stay under the workspace root, closing the
@@ -1021,7 +1021,7 @@ static void cmd_patch(astd_req *r) {
       memcpy(abs, r->workspace, wl);
       abs[wl] = '/';
       memcpy(abs + wl + 1, rel, reln + 1);
-      /* §8.5: run the diff target through the §6.4 pipeline ourselves —
+      /* Run the diff target through the pipeline ourselves —
        * resolve symlinks and confirm containment before any write. */
       {
         const char *why = NULL;

@@ -1,5 +1,5 @@
 /*
- * tool_sys.c — the `sys` standard tool (§8.7): sys.info reports host
+ * tool_sys.c — the `sys` standard tool: sys.info reports host
  * facts (os, arch, hostname, cpus, memory, astools version). Read-only,
  * no permissions required.
  */

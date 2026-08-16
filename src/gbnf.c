@@ -1,5 +1,5 @@
 /*
- * gbnf.c — GBNF grammar export (§7.3, Appendix C).
+ * gbnf.c — GBNF grammar export.
  *
  * The exported grammar's language is exactly the valid call lines of the
  * enabled registry: one production per (tool,command) in catalog order
@@ -15,7 +15,7 @@
  * Required params are emitted first, in manifest order, as fixed
  * '"name: " value' sequences joined by ", " literals; every optional
  * param follows as its own ( ", name: " value )? group. Simplification
- * (documented per §7.3 note): when a command has NO required params the
+ * (documented per note): when a command has NO required params the
  * leading-comma placement of the first present optional cannot be
  * expressed by plain concatenation, so the whole args object degrades to
  * the generic balanced single-line "obj" production — the grammar still

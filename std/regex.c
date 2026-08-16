@@ -1,6 +1,6 @@
 /*
  * regex.c — in-house ERE subset compiled to a Thompson NFA and executed
- * with set-simulation, no backtracking (D13, SPEC §A1.6).
+ * with set-simulation, no backtracking.
  *
  * Supported: literals, '.', '[...]' / '[^...]' with ranges and literal ']'
  * first, '^' (matches only offset 0), '$' (matches only end of buffer),

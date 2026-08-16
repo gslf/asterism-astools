@@ -1,6 +1,6 @@
 /*
  * test_callline.c — callline.c: CALL parsing + RESULT/ERROR formatting
- * (§7.2, §17).
+ *.
  */
 
 #include "astools_test.h"
@@ -75,7 +75,7 @@ TEST(parse_skips_prose) {
 }
 
 TEST(parse_malformed_skipped_then_valid_taken) {
-  /* first WELL-FORMED call line wins (§7.2) */
+  /* first WELL-FORMED call line wins */
   char *ref = NULL, *cmd = NULL, *args = NULL, *path;
   ASSERT_OK(astools_callline_parse(
       "CALL fs.read no braces here\n"
@@ -129,7 +129,7 @@ TEST(parse_not_found) {
 
 TEST(format_result_line) {
   /* result_xcdn is already compact xCDN text; the RESULT line carries it
-   * verbatim after "RESULT <ref>.<command> " (§7.2). */
+   * verbatim after "RESULT <ref>.<command> ". */
   astools_result r;
   char *line = NULL;
   memset(&r, 0, sizeof r);
@@ -141,7 +141,7 @@ TEST(format_result_line) {
 }
 
 TEST(format_error_line) {
-  /* contract: §7.2 — ERROR <tool>.<command> {code: …, message: …}; the
+  /* contract: — ERROR <tool>.<command> {code: …, message: …}; the
    * object body is compact xCDN, so the expectation is built with the
    * same serializer instead of a hand-written literal. */
   astools_result r;

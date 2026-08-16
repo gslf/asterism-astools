@@ -1,4 +1,4 @@
-# tests/CMakeLists.txt — astools unit + integration tests (§17).
+# tests/CMakeLists.txt — astools unit + integration tests.
 #
 # Every test_*.c is a standalone executable over astools_static (+xcdn).
 # test_json additionally compiles mcp/json.c; test_regex compiles
@@ -77,7 +77,7 @@ endforeach()
 
 set_tests_properties(${ASTOOLS_TESTS} PROPERTIES
   TIMEOUT 60
-  ENVIRONMENT "ASTOOLS_TEST_TOOL=$<TARGET_FILE:tool_fake>")
+  ENVIRONMENT "ASTOOLS_TEST_TOOL=$<TARGET_FILE:tool_fake>;ASTOOLS_JAIL=$<TARGET_FILE:astools-jail>")
 
 # ── std-tool containment regressions (need the real astools-std packages) ────
 if(ASTOOLS_BUILD_STD)

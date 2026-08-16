@@ -144,8 +144,31 @@ void astools_time_format_rfc3339(astools_time t, char out[32]) {
   h = (int)(sod / 3600);
   mi = (int)((sod / 60) % 60);
   se = (int)(sod % 60);
-  snprintf(out, 32, "%04lld-%02d-%02dT%02d:%02d:%02dZ", (long long)y, m, d, h,
-           mi, se);
+  if (y < 0 || y > 9999) {
+    out[0] = '\0';
+    return;
+  }
+  out[0] = (char)('0' + (y / 1000) % 10);
+  out[1] = (char)('0' + (y / 100) % 10);
+  out[2] = (char)('0' + (y / 10) % 10);
+  out[3] = (char)('0' + y % 10);
+  out[4] = '-';
+  out[5] = (char)('0' + m / 10);
+  out[6] = (char)('0' + m % 10);
+  out[7] = '-';
+  out[8] = (char)('0' + d / 10);
+  out[9] = (char)('0' + d % 10);
+  out[10] = 'T';
+  out[11] = (char)('0' + h / 10);
+  out[12] = (char)('0' + h % 10);
+  out[13] = ':';
+  out[14] = (char)('0' + mi / 10);
+  out[15] = (char)('0' + mi % 10);
+  out[16] = ':';
+  out[17] = (char)('0' + se / 10);
+  out[18] = (char)('0' + se % 10);
+  out[19] = 'Z';
+  out[20] = '\0';
 }
 
 /* ---- ISO 8601 durations -------------------------------------------------- */

@@ -1,5 +1,5 @@
 /*
- * tool_git.c — git wrapper tool (SPEC §8.6, A1, D14).
+ * tool_git.c — git wrapper tool.
  *
  * Wraps the system git found by iterating the (scrubbed) PATH; missing
  * binary means git/not-installed for every command. Always a constructed

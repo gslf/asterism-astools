@@ -1,5 +1,5 @@
 /*
- * sandbox_posix.c — per-invocation sandbox assembly (§6, §14): entry argv
+ * sandbox_posix.c — per-invocation sandbox assembly: entry argv
  * resolution under root trust, scrubbed environment, scratch directory,
  * resource-limit selection, Seatbelt jail wrapping (macOS strict), and the
  * honest capability report.
@@ -9,10 +9,19 @@
  * can never be overridden by a grant.
  */
 
+#if defined(__linux__)
+#define _GNU_SOURCE 1
+#endif
+
 #include "astools_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
+#if defined(__linux__)
+#include <linux/landlock.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 
 /* ---- growable NULL-terminated string vector ------------------------------ */
 
@@ -54,7 +63,7 @@ void astools_argv_free(char **argv) {
   free(argv);
 }
 
-/* ---- entry argv resolution (§3.2, §4.1) ---------------------------------- */
+/* ---- entry argv resolution ---------------------------------- */
 
 static int path_has_sep(const char *p) { return strchr(p, '/') != NULL; }
 
@@ -89,7 +98,7 @@ astools_err astools_entry_resolve_argv(const astools_tool *t, char ***out) {
   if (!argv) return ASTOOLS_ERR_NOMEM;
 
   if (t->trust == ASTOOLS_TRUST_STANDARD) {
-    /* Standard trust: argv[0] must stay inside the package (§4.1). Bare
+    /* Standard trust: argv[0] must stay inside the package. Bare
      * names (PATH lookup), absolute paths and ".." escapes are refused. */
     if (os_path_is_abs(a0) || !path_has_sep(a0) || path_has_dotdot(a0)) {
       free(argv);
@@ -120,7 +129,7 @@ astools_err astools_entry_resolve_argv(const astools_tool *t, char ***out) {
   return ASTOOLS_OK;
 }
 
-/* ---- environment scrub (§5.2) -------------------------------------------- */
+/* ---- environment scrub -------------------------------------------- */
 
 /* malloc'd "name=value". */
 static char *env_kv(const char *name, const char *value) {
@@ -136,7 +145,7 @@ static char *env_kv(const char *name, const char *value) {
 }
 
 /*
- * Names the runtime itself sets (§5.2). An env grant must never override
+ * Names the runtime itself sets. An env grant must never override
  * them: duplicate envp entries have libc-defined precedence, so a hostile
  * manifest granting "PATH" or "ASTOOLS_SCRATCH" could otherwise undo the
  * scrub. Names containing '=' would smuggle an extra variable.
@@ -151,9 +160,7 @@ static bool env_name_reserved(const char *name) {
   return false;
 }
 
-/* ---- jail discovery + Seatbelt profile (macOS strict, §6, §14) ----------- */
-
-#if defined(__APPLE__)
+/* ---- jail discovery + strict profiles -------------------------- */
 
 /*
  * Jail helper lookup: $ASTOOLS_JAIL when it names an existing file, else
@@ -187,6 +194,36 @@ static char *sandbox_jail_path(void) {
   return NULL;
 }
 
+#if defined(__linux__)
+static int sandbox_linux_supported(void) {
+  return syscall(__NR_landlock_create_ruleset, NULL, 0,
+                 LANDLOCK_CREATE_RULESET_VERSION) >= 1;
+}
+
+static astools_err linux_rule_push(char ***envp, size_t *envn,
+                                   size_t *envcap, size_t index,
+                                   int writable, const char *path) {
+  char name[64];
+  char *spec, *kv;
+  size_t n;
+  if (!path || path[0] == '\0') return ASTOOLS_OK;
+  if (snprintf(name, sizeof name, "ASTOOLS_JAIL_RULE_%zu", index) < 0)
+    return ASTOOLS_ERR_INVALID;
+  n = strlen(path);
+  if (n > SIZE_MAX - 3) return ASTOOLS_ERR_NOMEM;
+  spec = malloc(n + 3);
+  if (!spec) return ASTOOLS_ERR_NOMEM;
+  spec[0] = writable ? 'W' : 'R';
+  spec[1] = ':';
+  memcpy(spec + 2, path, n + 1);
+  kv = env_kv(name, spec);
+  free(spec);
+  return strv_push(envp, envn, envcap, kv);
+}
+#endif
+
+#if defined(__APPLE__)
+
 /* Error-latching append: no-op once *e != ASTOOLS_OK. */
 static void sb_add(astools_buf *b, astools_err *e, const char *s) {
   if (*e != ASTOOLS_OK) return;
@@ -215,7 +252,7 @@ static void sb_quote(astools_buf *b, astools_err *e, const char *s) {
 }
 
 /*
- * Seatbelt profile generator. Shape (deny-by-default, §6):
+ * Seatbelt profile generator. Shape (deny-by-default):
  *
  *   (version 1)
  *   (deny default)
@@ -304,7 +341,7 @@ static astools_err sandbox_sbpl_profile(const char *pkg_dir,
 
 #endif /* __APPLE__ */
 
-/* ---- sandbox preparation (§6) -------------------------------------------- */
+/* ---- sandbox preparation -------------------------------------------- */
 
 astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
                                     const astools_effective *eff,
@@ -317,6 +354,9 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
   char **envp = NULL, **argv = NULL;
   size_t envn = 0, envcap = 0, argn = 0, argcap = 0;
   size_t i, n;
+#if defined(__linux__)
+  size_t linux_rules = 0;
+#endif
   bool scratch_made = false;
   astools_err e;
 
@@ -325,12 +365,8 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
     return astools_seterr(c, ASTOOLS_ERR_INVALID,
                           "sandbox: invalid prepare arguments");
   memset(out, 0, sizeof *out);
-#if !defined(__APPLE__)
-  (void)t; /* pkg_dir only feeds the Seatbelt profile */
-#endif
-
   /* 1. Effective level. Strict needs kernel enforcement this build can
-   * actually deliver; otherwise reject or degrade per config (§6). */
+   * actually deliver; otherwise reject or degrade per config. */
   level = c->cfg.sandbox_level;
   if (level == ASTOOLS_SB_STRICT) {
 #if defined(__APPLE__)
@@ -347,6 +383,20 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
                   "privilege drop)");
       level = ASTOOLS_SB_BASIC;
     }
+#elif defined(__linux__)
+    jail = sandbox_jail_path();
+    if (!jail || !sandbox_linux_supported()) {
+      free(jail);
+      jail = NULL;
+      if (c->cfg.strict_fallback_reject)
+        return astools_seterr(
+            c, ASTOOLS_ERR_UNSUPPORTED,
+            "sandbox strict unavailable: Landlock or astools-jail missing");
+      astools_log(c, ASTOOLS_LOG_WARN, "sandbox",
+                  "strict requested but Landlock/helper is unavailable; "
+                  "degrading to basic");
+      level = ASTOOLS_SB_BASIC;
+    }
 #else
     if (c->cfg.strict_fallback_reject)
       return astools_seterr(
@@ -361,7 +411,7 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
 #endif
   }
 
-  /* 2. Private scratch dir = cwd, HOME and TMPDIR of the child (§5.2). */
+  /* 2. Private scratch dir = cwd, HOME and TMPDIR of the child. */
   scratch = os_path_join(c->scratch_base, invocation_id);
   if (!scratch) {
     e = astools_seterr(c, ASTOOLS_ERR_NOMEM, "sandbox: out of memory");
@@ -376,7 +426,7 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
   scratch_made = true;
 
   /* 3. Environment, rebuilt from scratch — the host environment never
-   * leaks except through explicit env grants (§5.2). */
+   * leaks except through explicit env grants. */
   e = strv_push(&envp, &envn, &envcap,
                 astools_strdup("PATH=/usr/bin:/bin:/usr/sbin:/sbin"));
   if (e == ASTOOLS_OK)
@@ -394,6 +444,17 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
                          c->workspace ? c->workspace : ""));
   if (e == ASTOOLS_OK)
     e = strv_push(&envp, &envn, &envcap, env_kv("ASTOOLS_SCRATCH", scratch));
+#if defined(ASTOOLS_SANITIZERS_ACTIVE)
+  /* LeakSanitizer relies on ptrace and cannot initialize in many container
+   * sandboxes.  Child tools remain fully ASan/UBSan-instrumented; only the
+   * incompatible leak pass is disabled for this diagnostic build. */
+  if (e == ASTOOLS_OK)
+    e = strv_push(&envp, &envn, &envcap,
+                  astools_strdup("ASAN_OPTIONS=detect_leaks=0:halt_on_error=1"));
+  if (e == ASTOOLS_OK)
+    e = strv_push(&envp, &envn, &envcap,
+                  astools_strdup("UBSAN_OPTIONS=halt_on_error=1"));
+#endif
   if (e != ASTOOLS_OK) {
     e = astools_seterr(c, e, "sandbox: cannot build environment");
     goto fail;
@@ -418,11 +479,46 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
     }
   }
 
+#if defined(__linux__)
+  if (level == ASTOOLS_SB_STRICT) {
+    static const char *const system_read[] = {
+        "/usr", "/bin", "/lib", "/lib64", "/etc", "/proc",
+        "/dev/null", "/dev/urandom"};
+    char count[32];
+    for (i = 0; i < sizeof system_read / sizeof system_read[0]; i++) {
+      e = linux_rule_push(&envp, &envn, &envcap, linux_rules, 0,
+                          system_read[i]);
+      if (e != ASTOOLS_OK) goto fail;
+      linux_rules++;
+    }
+    e = linux_rule_push(&envp, &envn, &envcap, linux_rules++, 0,
+                        t->pkg_dir);
+    if (e == ASTOOLS_OK)
+      e = linux_rule_push(&envp, &envn, &envcap, linux_rules++, 0,
+                          entry_argv[0]);
+    if (e == ASTOOLS_OK)
+      e = linux_rule_push(&envp, &envn, &envcap, linux_rules++, 1, scratch);
+    for (i = 0; e == ASTOOLS_OK && i < eff->fs_len; i++) {
+      e = linux_rule_push(&envp, &envn, &envcap, linux_rules++,
+                          (eff->fs[i].access & ASTOOLS_ACCESS_WRITE) != 0,
+                          eff->fs[i].path);
+    }
+    if (e != ASTOOLS_OK) goto fail;
+    (void)snprintf(count, sizeof count, "%zu", linux_rules);
+    e = strv_push(&envp, &envn, &envcap,
+                  env_kv("ASTOOLS_JAIL_RULES", count));
+    if (e == ASTOOLS_OK && eff->net)
+      e = strv_push(&envp, &envn, &envcap,
+                    astools_strdup("ASTOOLS_JAIL_NET=allow"));
+    if (e != ASTOOLS_OK) goto fail;
+  }
+#endif
+
   /* 5. Exec vector; strict on macOS wraps it in the Seatbelt jail and
    * hands the profile over via ASTOOLS_JAIL_PROFILE. */
 #if defined(__APPLE__)
   if (level == ASTOOLS_SB_STRICT) {
-    char *profile = NULL, *kv, *j;
+    char *profile = NULL, *kv;
     e = sandbox_sbpl_profile(t->pkg_dir, scratch, eff, &profile);
     if (e != ASTOOLS_OK) {
       e = astools_seterr(c, e, "sandbox: cannot generate Seatbelt profile");
@@ -435,7 +531,11 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
       e = astools_seterr(c, e, "sandbox: cannot build environment");
       goto fail;
     }
-    j = jail;
+  }
+#endif
+#if defined(__APPLE__) || defined(__linux__)
+  if (level == ASTOOLS_SB_STRICT) {
+    char *j = jail;
     jail = NULL; /* ownership moves into argv (or is freed by push) */
     e = strv_push(&argv, &argn, &argcap, j);
     if (e == ASTOOLS_OK)
@@ -457,13 +557,15 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
 
   /* 4. Limits. CPU stays 0: invoke derives RLIMIT_CPU from the deadline
    * and the worker applies it at spawn. RLIMIT_AS is unreliable on macOS
-   * (§14: system frameworks mmap far past any sane cap) and RLIMIT_NPROC
+   * (system frameworks mmap far past any sane cap) and RLIMIT_NPROC
    * is per-uid there (a cap would throttle the whole login session), so
    * both are Linux-only; level none is debug mode and stays unlimited. */
   out->limit_cpu_seconds = 0;
 #if defined(__linux__)
   if (level != ASTOOLS_SB_NONE) {
+#if !defined(ASTOOLS_SANITIZERS_ACTIVE)
     out->limit_mem_bytes = (int64_t)1 << 30;
+#endif
     out->limit_nproc = 256;
   }
 #endif
@@ -499,16 +601,18 @@ void astools_sandbox_cleanup(astools_ctx *c, astools_sandbox_setup *s,
   memset(s, 0, sizeof *s);
 }
 
-/* ---- honest capability report (§6.5, §14) -------------------------------- */
+/* ---- honest capability report -------------------------------- */
 
 astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out) {
   if (!out) return ASTOOLS_ERR_INVALID;
   memset(out, 0, sizeof *out);
   /* basic (POSIX): RLIMIT_CPU everywhere; RLIMIT_AS / RLIMIT_NPROC only
-   * trustworthy on Linux (§14). fs/net policy is pre-flight only. */
+   * trustworthy on Linux. fs/net policy is pre-flight only. */
   out->cpu_cap = 1;
 #if defined(__linux__)
+#if !defined(ASTOOLS_SANITIZERS_ACTIVE)
   out->memory_cap = 1;
+#endif
   out->process_cap = 1;
 #endif
 #if defined(__APPLE__)
@@ -524,9 +628,18 @@ astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out) {
       free(jail);
     }
   }
+#elif defined(__linux__)
+  if (strict && sandbox_linux_supported()) {
+    char *jail = sandbox_jail_path();
+    if (jail) {
+      out->fs_confinement = 1;
+      out->net_deny = 1;
+      out->syscall_filter = 1;
+      out->privilege_drop = 1;
+      free(jail);
+    }
+  }
 #else
-  /* strict on Linux in this build: Landlock/seccomp not wired yet, so the
-   * report stays identical to basic (honest zeros). */
   (void)strict;
 #endif
   return ASTOOLS_OK;

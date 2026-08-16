@@ -1,5 +1,5 @@
 /*
- * main.c — entry point of the astools-std busybox binary (§8).
+ * main.c — entry point of the astools-std busybox binary.
  *
  * Dispatches on `--tool <id>` (fallback: ASTOOLS_STD_TOOL) to one of the
  * astd_tool_* entry points. stdout carries exactly one #tool_response;

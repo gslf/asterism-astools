@@ -1,5 +1,5 @@
 /*
- * jscm.c — JSON Schema + MCP description strings (§7.4).
+ * jscm.c — JSON Schema + MCP description strings.
  *
  * Emits JSON as text by hand into astools_buf (libastools links no JSON
  * library). All renderings are deterministic: key order is fixed, numbers

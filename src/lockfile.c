@@ -1,5 +1,5 @@
 /*
- * lockfile.c — astools.lock.xcdn load / check / approve (§4.4).
+ * lockfile.c — astools.lock.xcdn load / check / approve.
  *
  * The lockfile is untrusted input: every shape is validated, hashes must be
  * exactly 32 bytes, and artifact paths taken from the file are only ever
@@ -18,7 +18,7 @@
 
 /* ---- shared predicates --------------------------------------------------- */
 
-/* §4.1 package-relative: contains a path separator, is not absolute (no
+/* package-relative: contains a path separator, is not absolute (no
  * leading separator, no drive prefix), and has no ".." component. */
 static bool pkg_relative(const char *p) {
   size_t i = 0;
@@ -657,7 +657,7 @@ astools_err astools_lockfile_approve(const char *path, const char *id,
   memcpy(tmp + plen, ".tmp", 5);
 
   e = os_write_file(tmp, text, strlen(text));
-  if (e == ASTOOLS_OK) e = os_file_replace(tmp, path); /* §14 atomic */
+  if (e == ASTOOLS_OK) e = os_file_replace(tmp, path); /* atomic */
   if (e != ASTOOLS_OK) (void)os_remove_file(tmp);
 
 out:

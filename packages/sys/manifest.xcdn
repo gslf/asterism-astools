@@ -1,4 +1,4 @@
-// astools standard suite — sys (SPEC §8.7): host system information.
+// astools standard suite — sys: host system information.
 // One busybox-style binary dispatched with `--tool sys`. Besides the
 // three release platforms, two extra dev entries (macos/x86_64,
 // linux/arm64) keep the tool available on every common dev machine.

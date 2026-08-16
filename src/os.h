@@ -1,11 +1,11 @@
 /*
- * os.h — platform shim for libastools (§13.1): threads, filesystem, time,
+ * os.h — platform shim for libastools: threads, filesystem, time,
  * processes, pipes.
  *
  * The baseline section (threads/fs/misc) is shared with the Asper sibling
  * and implemented by os_posix.c + os_common.c (os_win32.c on Windows).
  * The process/path section below is astools-specific and implemented by
- * os_proc_posix.c (os_proc_win32.c is future work — §14 status in docs).
+ * os_proc_posix.c (os_proc_win32.c is future work — status in docs).
  *
  * With ASTOOLS_NO_THREADS defined, the locking primitives compile to no-ops
  * and os_thread_start returns ASTOOLS_ERR_INVALID.
@@ -21,6 +21,66 @@
 #include <stdio.h>
 
 #include "astools.h" /* astools_err */
+
+/* Link-time prefix: libastools coexists in one process with its siblings'
+ * identically-named OS shims, so every shim symbol is renamed to
+ * astls_x_* at compile time. Call sites keep the short names. */
+#define os_thread_start       astls_x_thread_start
+#define os_thread_join        astls_x_thread_join
+#define os_mutex_init         astls_x_mutex_init
+#define os_mutex_destroy      astls_x_mutex_destroy
+#define os_mutex_lock         astls_x_mutex_lock
+#define os_mutex_unlock       astls_x_mutex_unlock
+#define os_cond_init          astls_x_cond_init
+#define os_cond_destroy       astls_x_cond_destroy
+#define os_cond_timedwait     astls_x_cond_timedwait
+#define os_cond_wait          astls_x_cond_wait
+#define os_cond_signal        astls_x_cond_signal
+#define os_cond_broadcast     astls_x_cond_broadcast
+#define os_rwlock_init        astls_x_rwlock_init
+#define os_rwlock_destroy     astls_x_rwlock_destroy
+#define os_rwlock_rdlock      astls_x_rwlock_rdlock
+#define os_rwlock_rdunlock    astls_x_rwlock_rdunlock
+#define os_rwlock_wrlock      astls_x_rwlock_wrlock
+#define os_rwlock_wrunlock    astls_x_rwlock_wrunlock
+#define os_file_replace       astls_x_file_replace
+#define os_fsync              astls_x_fsync
+#define os_mkdir_p            astls_x_mkdir_p
+#define os_file_exists        astls_x_file_exists
+#define os_read_file          astls_x_read_file
+#define os_write_file         astls_x_write_file
+#define os_remove_file        astls_x_remove_file
+#define os_truncate           astls_x_truncate
+#define os_file_size          astls_x_file_size
+#define os_rename             astls_x_rename
+#define os_list_dir           astls_x_list_dir
+#define os_list_subdirs       astls_x_list_subdirs
+#define os_rmtree             astls_x_rmtree
+#define os_fopen              astls_x_fopen
+#define os_now_unix           astls_x_now_unix
+#define os_monotonic_ms       astls_x_monotonic_ms
+#define os_random_bytes       astls_x_random_bytes
+#define os_hardware_threads   astls_x_hardware_threads
+#define os_path_join          astls_x_path_join
+#define os_stat               astls_x_stat
+#define os_lstat              astls_x_lstat
+#define os_realpath           astls_x_realpath
+#define os_path_is_abs        astls_x_path_is_abs
+#define os_getcwd_dup         astls_x_getcwd_dup
+#define os_exe_path           astls_x_exe_path
+#define os_env_dup            astls_x_env_dup
+#define os_dylib_open         astls_x_dylib_open
+#define os_dylib_close        astls_x_dylib_close
+#define os_proc_spawn         astls_x_proc_spawn
+#define os_proc_wait          astls_x_proc_wait
+#define os_proc_poll          astls_x_proc_poll
+#define os_proc_kill          astls_x_proc_kill
+#define os_proc_terminate     astls_x_proc_terminate
+#define os_proc_read          astls_x_proc_read
+#define os_proc_write_stdin   astls_x_proc_write_stdin
+#define os_proc_close_stdin   astls_x_proc_close_stdin
+#define os_proc_free          astls_x_proc_free
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -142,8 +202,8 @@ astools_err os_realpath(const char *path, char **out);
 int   os_path_is_abs(const char *path);
 char *os_getcwd_dup(void); /* malloc'd; NULL on failure */
 
-/* Absolute path of the current executable (install-root discovery,
- * §A2.3.4). malloc'd. */
+/* Absolute path of the current executable (install-root discovery).
+ * malloc'd. */
 astools_err os_exe_path(char **out);
 
 /* Immediate subdirectory names of path (no files), malloc'd array of
@@ -167,6 +227,7 @@ typedef struct {
   int fd_out;       /* child stdout (read end); -1 = closed  */
   int fd_err;       /* child stderr (read end); -1 = closed  */
   int pgroup;       /* POSIX: child leads its own group      */
+  int64_t pgid;     /* retained after leader reap for tree cleanup */
 } os_proc;
 
 typedef struct {
@@ -218,7 +279,7 @@ astools_err os_proc_wait(os_proc *p, int64_t timeout_ms, int *exit_code);
 /* Close any remaining fds/handles. Does not kill or reap. */
 void os_proc_free(os_proc *p);
 
-/* ---- dynamic libraries (kind "library", §5.4) ---------------------------- */
+/* ---- dynamic libraries (kind "library") ---------------------------- */
 
 typedef struct { void *h; } os_dylib;
 

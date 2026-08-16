@@ -1,4 +1,4 @@
-// astools standard suite — grep (SPEC §8.4, A1): search file contents.
+// astools standard suite — grep: search file contents.
 // One busybox-style binary dispatched with `--tool grep`. Besides the
 // three release platforms, two extra dev entries (macos/x86_64,
 // linux/arm64) keep the tool available on every common dev machine.

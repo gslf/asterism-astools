@@ -1,5 +1,5 @@
 /*
- * json.h — strict RFC 8259 JSON codec for astools-mcp (spec §10).
+ * json.h — strict RFC 8259 JSON codec for astools-mcp.
  *
  * DOM-style value tree. In-house by design: JSON exists only in the MCP
  * layer; the rest of Astools speaks xCDN.

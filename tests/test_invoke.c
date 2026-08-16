@@ -1,6 +1,6 @@
 /*
- * test_invoke.c — the §5.1 pipeline end to end against the scripted
- * tool_fake binary (§17): validation, dispatch, protocol failures,
+ * test_invoke.c — the pipeline end to end against the scripted
+ * tool_fake binary: validation, dispatch, protocol failures,
  * deadlines, output caps, result validation, stats.
  */
 
@@ -34,7 +34,7 @@ typedef struct {
   astools_ctx *c;
 } inv_fx;
 
-static int inv_setup(inv_fx *f) {
+static int inv_setup_level(inv_fx *f, const char *sandbox_extra) {
   astools_open_params p;
   static const char RET_CMDS[] =
       "#command {\n"
@@ -80,17 +80,27 @@ static int inv_setup(inv_fx *f) {
   if (!fake_registry_write(f->root_raw, "ret", tool_path(), "echo", NULL,
                            RET_CMDS, NULL))
     return 0;
+  if (!fake_registry_write(f->root_raw, "netp", tool_path(), "netprobe",
+                           NULL, FAKE_CMD_RUN_EMPTY, NULL))
+    return 0;
 
   snprintf(f->cfg_path, sizeof f->cfg_path, "%s/config.xcdn", f->cfg_raw);
-  if (!fake_config_write(f->cfg_path, f->root_raw, 1, f->ws,
-                         "invocation: { max_output_bytes: 4096,"
-                         " result_validation: \"enforce\" },"))
-    return 0;
+  {
+    char extra[1024];
+    snprintf(extra, sizeof extra,
+             "invocation: { max_output_bytes: 4096,"
+             " result_validation: \"enforce\" },%s",
+             sandbox_extra ? sandbox_extra : "");
+    if (!fake_config_write(f->cfg_path, f->root_raw, 1, f->ws, extra))
+      return 0;
+  }
 
   memset(&p, 0, sizeof p);
   p.config_path = f->cfg_path;
   return astools_open(&p, &f->c) == ASTOOLS_OK;
 }
+
+static int inv_setup(inv_fx *f) { return inv_setup_level(f, NULL); }
 
 static void inv_drop(inv_fx *f) {
   if (f->c) astools_close(f->c);
@@ -139,6 +149,25 @@ static int result_int(const char *result_xcdn, const char *key,
   return found;
 }
 
+static int result_bool(const char *result_xcdn, const char *key, int *out) {
+  xcdn_error_t xe;
+  xcdn_document_t *doc;
+  int found = 0;
+  memset(&xe, 0, sizeof xe);
+  doc = xcdn_parse(result_xcdn, &xe);
+  if (!doc) return 0;
+  if (doc->values_len > 0 && doc->values[0]->value &&
+      doc->values[0]->value->type == XCDN_VAL_OBJECT) {
+    const xcdn_node_t *n = xcdn_object_get(doc->values[0]->value, key);
+    if (n && n->value && n->value->type == XCDN_VAL_BOOL) {
+      *out = n->value->data.boolean ? 1 : 0;
+      found = 1;
+    }
+  }
+  xcdn_document_free(doc);
+  return found;
+}
+
 TEST(echo_canonical_path_and_default) {
   inv_fx f;
   astools_result r;
@@ -162,7 +191,7 @@ TEST(echo_canonical_path_and_default) {
   }
   ASSERT_EQ_INT(r.ok, 1);
   ASSERT_TRUE(r.result_xcdn != NULL);
-  /* the tool saw the canonical absolute path (§6.4) … */
+  /* the tool saw the canonical absolute path … */
   snprintf(want, sizeof want, "%s/data/out.txt", f.ws);
   p_val = result_str(r.result_xcdn, "p");
   if (p_val == NULL || strcmp(p_val, want) != 0) {
@@ -174,7 +203,7 @@ TEST(echo_canonical_path_and_default) {
     return;
   }
   free(p_val);
-  /* … and the injected default (D8) */
+  /* … and the injected default */
   if (!result_int(r.result_xcdn, "count", &count) || count != 7) {
     ASTOOLS_FAILF("default count=7 not injected (result: %s)",
                 r.result_xcdn);
@@ -212,7 +241,7 @@ TEST(validation_errors) {
   ASSERT_ERR(astools_invoke(f.c, "fk", "run", "{}", 0, &r),
              ASTOOLS_ERR_INVALID);
   astools_result_free(&r);
-  /* contract: §5.1 step 1 — an unresolvable ref/command is NOT_FOUND */
+  /* contract: step 1 — an unresolvable ref/command is NOT_FOUND */
   ASSERT_ERR(astools_invoke(f.c, "fk", "nope", "{ msg: \"x\" }", 0, &r),
              ASTOOLS_ERR_NOT_FOUND);
   astools_result_free(&r);
@@ -266,7 +295,7 @@ TEST(bad_protocol_is_err_protocol) {
   ASSERT_ERR(astools_invoke(f.c, "bad", "run", "{}", 0, &r),
              ASTOOLS_ERR_PROTOCOL);
   astools_result_free(&r);
-  /* clean exit 0 with NO response is a protocol failure too (§5.2) */
+  /* clean exit 0 with NO response is a protocol failure too */
   ASSERT_ERR(astools_invoke(f.c, "nores", "run", "{}", 0, &r),
              ASTOOLS_ERR_PROTOCOL);
   astools_result_free(&r);
@@ -315,7 +344,7 @@ TEST(flood_hits_output_cap) {
     return;
   }
   /* invocation.max_output_bytes = 4096; overflow kills, never truncates
-   * (§5.6) */
+   * */
   e = astools_invoke(f.c, "fld", "run", "{}", 10000, &r);
   if (e != ASTOOLS_ERR_TOOL) {
     ASTOOLS_FAILF("expected ERR_TOOL for overflow, got %s",
@@ -331,7 +360,7 @@ TEST(flood_hits_output_cap) {
 
 TEST(result_validation_enforce) {
   /* invocation.result_validation = enforce: a returns-typed command whose
-   * echoed result violates the declared type => ERR_PROTOCOL (§5.1/7). */
+   * echoed result violates the declared type => ERR_PROTOCOL (7). */
   inv_fx f;
   astools_result r;
   astools_err e;
@@ -382,6 +411,74 @@ TEST(sequential_invocations_reuse_context) {
   inv_drop(&f);
 }
 
+TEST(async_cancel_is_race_free_and_fast) {
+  inv_fx f;
+  astools_task *task = NULL;
+  astools_result r;
+  int64_t start;
+  memset(&r, 0, sizeof r);
+  if (!inv_setup(&f)) {
+    ASTOOLS_FAILF("setup failed");
+    inv_drop(&f);
+    return;
+  }
+  start = os_monotonic_ms();
+  {
+    astools_err e = astools_invoke_async(f.c, "slp", "run",
+                                         "{ ms: 3000 }", 5000, &task);
+    if (e == ASTOOLS_ERR_UNSUPPORTED) {
+      inv_drop(&f); /* expected for ASTOOLS_NO_THREADS builds */
+      return;
+    }
+    ASSERT_OK(e);
+  }
+  ASSERT_ERR(astools_task_wait(task, 1, NULL), ASTOOLS_ERR_BUSY);
+  ASSERT_OK(astools_task_cancel(task));
+  ASSERT_ERR(astools_task_wait(task, 2000, &r), ASTOOLS_ERR_CANCELLED);
+  ASSERT_TRUE(os_monotonic_ms() - start < 2000);
+  ASSERT_EQ_STR(r.error_code, "astools/cancelled");
+  astools_result_free(&r);
+  astools_task_free(task);
+  inv_drop(&f);
+}
+
+TEST(strict_linux_executes_when_available) {
+  inv_fx f;
+  astools_sandbox_caps caps;
+  astools_result r;
+  int socket_ok = 1;
+  memset(&r, 0, sizeof r);
+  if (!inv_setup_level(
+          &f,
+          "sandbox: { default_level: \"strict\", strict_fallback: \"reject\" },")) {
+    ASTOOLS_FAILF("strict setup failed");
+    inv_drop(&f);
+    return;
+  }
+  ASSERT_OK(astools_get_sandbox_caps(f.c, 1, &caps));
+  if (!caps.fs_confinement) {
+    inv_drop(&f); /* old kernel/platform: capability report is the contract */
+    return;
+  }
+  ASSERT_TRUE(caps.net_deny && caps.syscall_filter && caps.privilege_drop);
+  if (astools_invoke(f.c, "fk", "run", "{ msg: \"strict\" }", 2000, &r) !=
+      ASTOOLS_OK) {
+    ASTOOLS_FAILF("strict invoke failed: %s", astools_last_error(f.c));
+    astools_result_free(&r);
+    inv_drop(&f);
+    return;
+  }
+  ASSERT_EQ_INT(r.ok, 1);
+  astools_result_free(&r);
+  memset(&r, 0, sizeof r);
+  ASSERT_OK(astools_invoke(f.c, "netp", "run", "{}", 2000, &r));
+  ASSERT_EQ_INT(r.ok, 1);
+  ASSERT_TRUE(result_bool(r.result_xcdn, "socket_ok", &socket_ok));
+  ASSERT_EQ_INT(socket_ok, 0);
+  astools_result_free(&r);
+  inv_drop(&f);
+}
+
 TEST_LIST = {
   TEST_ENTRY(echo_canonical_path_and_default),
   TEST_ENTRY(validation_errors),
@@ -391,6 +488,8 @@ TEST_LIST = {
   TEST_ENTRY(flood_hits_output_cap),
   TEST_ENTRY(result_validation_enforce),
   TEST_ENTRY(sequential_invocations_reuse_context),
+  TEST_ENTRY(async_cancel_is_race_free_and_fast),
+  TEST_ENTRY(strict_linux_executes_when_available),
 };
 
 RUN_ALL_TESTS()

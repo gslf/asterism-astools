@@ -1,5 +1,5 @@
 /*
- * catalog.c — budgeted catalog rendering (§7.1).
+ * catalog.c — budgeted catalog rendering.
  *
  * Determinism: identical registry state and configuration produce
  * byte-identical text. Tool order is cfg.priority ids first (in priority
@@ -7,7 +7,7 @@
  * manifest order. Disabled/unavailable tools never render. When several
  * versions of one id are listed, the highest non-pre-release wins (the
  * highest pre-release when nothing else exists), mirroring bare-ref
- * resolution (§3.7).
+ * resolution.
  *
  * Budget algorithm (char_budget 0 = unlimited; "characters" are UTF-8
  * bytes): render every selected tool at the requested level; when the
@@ -44,7 +44,7 @@ static bool tool_listed(const astools_tool *t) {
 }
 
 /* Release beats pre-release; then higher SemVer. Ties keep the incumbent
- * (first root wins, §4.1). */
+ * (first root wins). */
 static bool version_better(const astools_tool *cand, const astools_tool *cur) {
   bool cand_rel = cand->ver.prerelease == NULL;
   bool cur_rel = cur->ver.prerelease == NULL;

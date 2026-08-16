@@ -1,5 +1,5 @@
 /*
- * test_util.c — util.c: buffers, base64, slugs, strings (§17).
+ * test_util.c — util.c: buffers, base64, slugs, strings.
  */
 
 #include "astools_test.h"
@@ -86,7 +86,7 @@ TEST(slug_rules) {
   ASSERT_TRUE(!astools_slug_valid("-a"));   /* leading dash */
   ASSERT_TRUE(!astools_slug_valid("A"));    /* uppercase */
   ASSERT_TRUE(!astools_slug_valid("aB"));
-  ASSERT_TRUE(!astools_slug_valid("a_b"));  /* underscore (D7) */
+  ASSERT_TRUE(!astools_slug_valid("a_b"));  /* underscore */
   ASSERT_TRUE(!astools_slug_valid("a.b"));
   ASSERT_TRUE(!astools_slug_valid("a b"));
   ASSERT_TRUE(!astools_slug_valid(long_bad)); /* 65 chars */

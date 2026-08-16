@@ -1,5 +1,5 @@
 /*
- * tool_grep.c — grep.search (SPEC §8.4, A1).
+ * tool_grep.c — grep.search.
  *
  * Line-based search under one root path. lstat walk that never follows
  * symlinks (symlink entries count as skipped); directory entries are
@@ -118,7 +118,8 @@ static lspan *split_lines(const char *buf, size_t n, size_t *count) {
     if (buf[i] == '\n') nl++;
   if (n > 0 && buf[n - 1] != '\n') nl++;
   *count = nl;
-  if (nl == 0) return malloc(1); /* non-NULL sentinel for empty files */
+  if (nl == 0)
+    return malloc(sizeof *ls); /* non-NULL, correctly typed sentinel */
   ls = malloc(nl * sizeof *ls);
   if (!ls) return NULL;
   start = 0;

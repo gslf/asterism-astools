@@ -1,5 +1,5 @@
 /*
- * tool_env.c — the `env` standard tool (§8.7): env.get / env.list.
+ * tool_env.c — the `env` standard tool: env.get / env.list.
  *
  * Only variables named in the request's grants.env array are visible.
  * An ungranted variable and a granted-but-unset one produce the exact

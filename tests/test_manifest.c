@@ -1,6 +1,6 @@
 /*
  * test_manifest.c — manifest.c: #astools_tool parsing, schema checks, lint
- * (§3.2–§3.3, §17). The fixture mirrors the Appendix-A / packages/fs shape.
+ *. The fixture mirrors the Appendix-A / packages/fs shape.
  */
 
 #include "astools_test.h"
@@ -147,7 +147,7 @@ TEST(parse_fs_manifest_fields) {
   ASSERT_EQ_STR(m->entries[0].argv[0], "bin/linux-x86_64/astools-std");
   ASSERT_EQ_STR(m->entries[0].argv[2], "fs");
 
-  /* ${workspace} expanded at load time (§3.2) */
+  /* ${workspace} expanded at load time */
   ASSERT_EQ_INT(m->perms.fs_len, 1);
   ASSERT_EQ_STR(m->perms.fs[0].path, "/ws");
   ASSERT_EQ_INT(m->perms.fs[0].access, ASTOOLS_ACCESS_RW);
@@ -209,7 +209,7 @@ TEST(reject_bad_id) {
 }
 
 TEST(reject_underscore_id) {
-  /* D7: no underscore, so <tool>_<command> stays bijective */
+  /* No underscore, so <tool>_<command> stays bijective */
   expect_reject("id: \"fs\"", "id: \"my_tool\"");
 }
 
@@ -230,7 +230,7 @@ TEST(reject_unknown_kind) {
 }
 
 TEST(reject_default_violating_type) {
-  /* A default must satisfy its own declared type (§3.4). */
+  /* A default must satisfy its own declared type. */
   expect_reject("min: 0 }, required: false, default: 0",
                 "min: 0 }, required: false, default: \"zero\"");
 }

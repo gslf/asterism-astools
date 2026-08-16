@@ -1,5 +1,5 @@
 /*
- * tool_proc.c — proc.run (SPEC §8.2, §8.7).
+ * tool_proc.c — proc.run.
  *
  * Direct exec, never a shell: argv[0] with a '/' is exec'd as a path,
  * otherwise resolved through PATH (execvp). The child stays in the
@@ -140,7 +140,7 @@ static int run_child(char *const *argv, char *const *envp, const char *cwd,
     goto spawn_fail;
   }
   if (pid == 0) {
-    /* child: same process group by design (§8.2) */
+    /* child: same process group by design */
     if (dup2(inp[0], 0) < 0 || dup2(outp[1], 1) < 0 || dup2(errp[1], 2) < 0)
       child_report(exep[1], 'p');
     close(inp[0]);
@@ -195,7 +195,16 @@ static int run_child(char *const *argv, char *const *envp, const char *cwd,
         kill(pid, SIGKILL);
         killed = 1;
         rr->timed_out = 1;
-        close_fd(&inp[1]); /* EOF for a child still reading */
+        /* Descendants may inherit these pipe ends.  Stop waiting for their
+         * EOF after the direct child deadline; the enclosing astools runtime
+         * owns the invocation process group and removes any residual tree. */
+        close_fd(&inp[1]);
+        close_fd(&outp[0]);
+        close_fd(&errp[0]);
+        /* Re-evaluate the loop condition now.  Falling through would call
+         * select(0, ..., NULL) after all descriptors were closed and block
+         * forever. */
+        continue;
       } else {
         tv.tv_sec = (time_t)(rem / 1000);
         tv.tv_usec = (suseconds_t)((rem % 1000) * 1000);

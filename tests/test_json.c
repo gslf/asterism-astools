@@ -1,5 +1,5 @@
 /*
- * test_json.c — mcp/json.c: strict RFC 8259 codec (jx) (§17). Compiled
+ * test_json.c — mcp/json.c: strict RFC 8259 codec (jx). Compiled
  * against mcp/json.c directly.
  */
 

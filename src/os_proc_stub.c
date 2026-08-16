@@ -1,6 +1,6 @@
 /*
  * os_proc_stub.c — honest ASTOOLS_ERR_UNSUPPORTED backend for the astools
- * process/path extension of os.h (§14: Windows implementation deferred).
+ * process/path extension of os.h (Windows implementation deferred).
  *
  * Added to the build only where os_proc_posix.c is not (WIN32), but the
  * file itself compiles on every platform; it is never linked together

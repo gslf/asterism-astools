@@ -1,6 +1,6 @@
 /*
  * manifest.c — #astools_tool parsing, schema validation, lint and canonical
- * re-serialization (§3.2–§3.3).
+ * re-serialization.
  *
  * Manifests are hostile input: every field is type-checked before use, the
  * first schema violation aborts the parse with a precise "manifest: ..."
@@ -1260,7 +1260,7 @@ astools_manifest *astools_manifest_parse(const char *text, size_t len,
     xcdn_document_free(doc);
     return NULL;
   }
-  /* defaults (§3.2) */
+  /* defaults */
   m->mode = ASTOOLS_MODE_ONESHOT;
   m->parallel = 1;
   m->idle_timeout_ms = 120000;
@@ -1295,7 +1295,7 @@ const astools_cmd *astools_manifest_cmd(const astools_manifest *m,
 
 /* ---- lint --------------------------------------------------------------- */
 
-/* §3.4: filesystem-flavoured names must be typed path, not string. */
+/* Filesystem-flavoured names must be typed path, not string. */
 static bool lint_pathish_name(const char *name) {
   static const char *exact[5] = {"path", "src", "dst", "file", "dir"};
   static const char *suffix[3] = {"_path", "_dir", "_file"};
@@ -1741,7 +1741,7 @@ fail:
   return NULL;
 }
 
-/* Canonical re-serialization: fields in §3.2 order, defaults materialized,
+/* Canonical re-serialization: fields in order, defaults materialized,
  * absent optionals omitted, durations as r"PT<seconds>S". */
 astools_err astools_manifest_render(const astools_manifest *m, char **out) {
   xcdn_document_t *doc = NULL;

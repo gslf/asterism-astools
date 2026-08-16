@@ -1,5 +1,5 @@
 /*
- * test_semver.c — semver.c: SemVer 2.0.0 parse + precedence (§3.7, §17).
+ * test_semver.c — semver.c: SemVer 2.0.0 parse + precedence.
  */
 
 #include "astools_test.h"
@@ -71,7 +71,7 @@ TEST(parse_rejects) {
 }
 
 TEST(precedence_table) {
-  /* SemVer 2.0.0 §11 canonical ordering chain. */
+  /* SemVer 2.0.0 canonical ordering chain. */
   static const char *chain[] = {
     "1.0.0-alpha",     "1.0.0-alpha.1", "1.0.0-alpha.beta",
     "1.0.0-beta",      "1.0.0-beta.2",  "1.0.0-beta.11",

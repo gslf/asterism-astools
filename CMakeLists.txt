@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(astools C)
 
-# ── Options (§13.3) ──────────────────────────────────────────────────────────
+# ── Options ──────────────────────────────────────────────────────────
 option(ASTOOLS_BUILD_MCP    "Build the astools-mcp server"        ON)
 option(ASTOOLS_BUILD_STD    "Build the astools-std tool suite"    ON)
 option(ASTOOLS_BUILD_NET    "Build the net tool (links libcurl)"  OFF)
@@ -25,6 +25,10 @@ if(MSVC)
   set(ASTOOLS_C_FLAGS /W4 /WX)
 else()
   set(ASTOOLS_C_FLAGS -Wall -Wextra -Wpedantic -Werror)
+  # Public/internal headers expose pthread rwlocks and the POSIX backends use
+  # realpath/strtok_r.  C_EXTENSIONS is deliberately OFF, so request the
+  # corresponding standards namespace for every in-tree target.
+  add_compile_definitions(_XOPEN_SOURCE=700)
 endif()
 
 if(ASTOOLS_SANITIZERS AND NOT MSVC)
@@ -47,34 +51,21 @@ else()
 endif()
 set(ASTOOLS_PLAT "${ASTOOLS_PLAT_OS}-${ASTOOLS_PLAT_ARCH}")
 
-# ── Dependencies (§13.1): xCDN-C only ────────────────────────────────────────
+# ── Dependencies: xCDN-C only ────────────────────────────────────────
 # xcdn-c registers its own add_test entries unconditionally, so its targets
 # must be buildable whenever our tests run (same approach as Asper).
 if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/xcdn-c/CMakeLists.txt)
   message(FATAL_ERROR "deps/xcdn-c missing — run: git submodule update --init")
 endif()
-# Local fix for two upstream xcdn-c defects (string-escape decode asymmetry,
-# unchecked realloc growth) until they land upstream; applied once, detected
-# by the buggy pattern so a fixed upstream skips it cleanly.
-file(READ ${CMAKE_CURRENT_SOURCE_DIR}/deps/xcdn-c/src/lexer.c ASTOOLS_XCDN_LEXER)
-string(FIND "${ASTOOLS_XCDN_LEXER}" "strbuf_push(&sb, 'n')" ASTOOLS_XCDN_BUGGY)
-if(NOT ASTOOLS_XCDN_BUGGY EQUAL -1)
-  execute_process(
-    COMMAND git apply ${CMAKE_CURRENT_SOURCE_DIR}/deps/patches/0001-xcdn-c-string-escapes-and-oom.patch
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/xcdn-c
-    RESULT_VARIABLE ASTOOLS_PATCH_RC)
-  if(NOT ASTOOLS_PATCH_RC EQUAL 0)
-    message(FATAL_ERROR "failed to apply deps/patches/0001-xcdn-c-*.patch")
+# Guarded so an embedding host (e.g. asngn) that already provides the xcdn
+# target can add this project via add_subdirectory without a collision.
+if(NOT TARGET xcdn)
+  if(ASTOOLS_BUILD_TESTS)
+    add_subdirectory(deps/xcdn-c)
+  else()
+    add_subdirectory(deps/xcdn-c EXCLUDE_FROM_ALL)
   endif()
-  message(STATUS "applied local xcdn-c fixes (deps/patches)")
 endif()
-unset(ASTOOLS_XCDN_LEXER)
-if(ASTOOLS_BUILD_TESTS)
-  add_subdirectory(deps/xcdn-c)
-else()
-  add_subdirectory(deps/xcdn-c EXCLUDE_FROM_ALL)
-endif()
-
 # ── libastools ───────────────────────────────────────────────────────────────
 set(ASTOOLS_SOURCES
   src/util.c
@@ -115,6 +106,11 @@ target_include_directories(astools_obj
           ${CMAKE_CURRENT_SOURCE_DIR}/deps/xcdn-c/src)
 target_compile_options(astools_obj PRIVATE ${ASTOOLS_C_FLAGS})
 target_link_libraries(astools_obj PUBLIC xcdn)
+if(ASTOOLS_SANITIZERS)
+  # ASan reserves a very large virtual address range.  The runtime uses this
+  # marker to avoid applying RLIMIT_AS to sanitizer-instrumented child tools.
+  target_compile_definitions(astools_obj PRIVATE ASTOOLS_SANITIZERS_ACTIVE)
+endif()
 if(ASTOOLS_NO_THREADS)
   target_compile_definitions(astools_obj PUBLIC ASTOOLS_NO_THREADS)
 endif()
@@ -136,13 +132,13 @@ foreach(tgt astools_static astools_shared)
   endif()
 endforeach()
 
-# ── astools-jail (§6.2; POSIX helper, ships next to libastools) ─────────────
+# ── astools-jail (POSIX helper, ships next to libastools) ─────────────
 if(NOT WIN32)
   add_executable(astools-jail jail/main.c)
   target_compile_options(astools-jail PRIVATE ${ASTOOLS_C_FLAGS})
 endif()
 
-# ── astools-std (§8): one busybox-style binary, links xcdn only ──────────────
+# ── astools-std: one busybox-style binary, links xcdn only ──────────────
 if(ASTOOLS_BUILD_STD)
   set(ASTOOLS_STD_SOURCES
     std/main.c
@@ -171,7 +167,7 @@ if(ASTOOLS_BUILD_STD)
     target_compile_definitions(astools-std PRIVATE ASTOOLS_BUILD_NET)
   endif()
 
-  # Assemble ready-to-copy packages: manifest + per-platform binary (§3.1).
+  # Assemble ready-to-copy packages: manifest + per-platform binary.
   set(ASTOOLS_STD_TOOLS fs grep edit sys env proc git)
   if(ASTOOLS_BUILD_NET)
     list(APPEND ASTOOLS_STD_TOOLS net)
@@ -196,7 +192,7 @@ if(ASTOOLS_BUILD_STD)
   add_custom_target(astools_packages ALL DEPENDS ${ASTOOLS_PKG_STAMPS})
 endif()
 
-# ── astools-mcp (§11) ────────────────────────────────────────────────────────
+# ── astools-mcp ────────────────────────────────────────────────────────
 if(ASTOOLS_BUILD_MCP)
   add_executable(astools-mcp mcp/main.c mcp/json.c)
   target_include_directories(astools-mcp PRIVATE
@@ -208,7 +204,7 @@ if(ASTOOLS_BUILD_MCP)
   target_link_libraries(astools-mcp PRIVATE astools_static)
 endif()
 
-# ── astools-check (§1.2, §A2.4) ──────────────────────────────────────────────
+# ── astools-check ──────────────────────────────────────────────────────────
 if(ASTOOLS_BUILD_CHECK)
   add_executable(astools-check check/main.c)
   target_include_directories(astools-check PRIVATE
@@ -219,7 +215,7 @@ if(ASTOOLS_BUILD_CHECK)
   target_link_libraries(astools-check PRIVATE astools_static)
 endif()
 
-# ── Agent Plugin package (§A2.3) ─────────────────────────────────────────────
+# ── Agent Plugin package ─────────────────────────────────────────────
 if(ASTOOLS_BUILD_PLUGIN)
   set(ASTOOLS_PLUGIN_DIR ${CMAKE_BINARY_DIR}/astools-plugin)
   add_custom_target(astools_plugin ALL

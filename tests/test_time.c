@@ -1,5 +1,5 @@
 /*
- * test_time.c — time.c: RFC 3339 parse/format, ISO 8601 durations (§17).
+ * test_time.c — time.c: RFC 3339 parse/format, ISO 8601 durations.
  */
 
 #include "astools_test.h"
@@ -92,7 +92,7 @@ TEST(duration_accepts) {
 
 TEST(duration_rejects) {
   int64_t out = 0;
-  /* P1M is MONTHS => rejected (calendar-dependent, §time.c contract) */
+  /* P1M is MONTHS => rejected (calendar-dependent) */
   ASSERT_TRUE(!astools_duration_parse("P1M", &out));
   ASSERT_TRUE(!astools_duration_parse("P1Y", &out));
   ASSERT_TRUE(!astools_duration_parse("P1Y2M3D", &out));

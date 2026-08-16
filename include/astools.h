@@ -1,17 +1,17 @@
 /*
- * astools.h — public C API of libastools (spec §10, naming per Amendment A2).
+ * astools.h — public C API of libastools.
  *
  * astools (Asterism Tools) is a local, plug-and-play registry of system
  * tools for LLM agents: a tool is a directory dropped into a registry root,
  * described by one #astools_tool xCDN manifest that is simultaneously the
  * machine contract and the conversational interface.
  *
- * Contract notes (§10):
+ * Contract notes:
  *  - All strings are UTF-8.
  *  - Every function returns astools_err except destructors.
  *  - Every out-allocation is released with astools_free / astools_result_free.
  *  - astools_open/astools_close are not thread-safe with respect to the same
- *    context; everything else is (§9).
+ *    context; everything else is.
  *  - No global state: multiple contexts over different workspaces may
  *    coexist in one process.
  *
@@ -67,7 +67,7 @@ void        astools_close(astools_ctx *c); /* joins the supervisor */
  * valid until the next failing call on the same thread's context). */
 const char *astools_last_error(const astools_ctx *c);
 
-/* ---- registry (§4) ------------------------------------------------------ */
+/* ---- registry ------------------------------------------------------ */
 
 astools_err astools_registry_refresh(astools_ctx *c);
 
@@ -82,10 +82,10 @@ astools_err astools_tool_manifest(astools_ctx *c, const char *ref,
 
 astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on);
 
-/* Recompute and record lockfile hashes for the resolved tool (§4.4). */
+/* Recompute and record lockfile hashes for the resolved tool. */
 astools_err astools_tool_approve(astools_ctx *c, const char *ref);
 
-/* ---- conversational interface (§7) -------------------------------------- */
+/* ---- conversational interface -------------------------------------- */
 
 typedef enum {
   ASTOOLS_CATALOG_INDEX = 0,
@@ -99,10 +99,10 @@ astools_err astools_catalog(astools_ctx *c, astools_catalog_level level,
                             size_t char_budget, char **out_text);
 
 /* llama.cpp GBNF grammar whose language is exactly the valid call lines
- * of the current registry (§7.3). */
+ * of the current registry. */
 astools_err astools_grammar_export(astools_ctx *c, char **out_gbnf);
 
-/* First call line in model output; ASTOOLS_ERR_NOT_FOUND if none (§7.2). */
+/* First call line in model output; ASTOOLS_ERR_NOT_FOUND if none. */
 astools_err astools_call_parse(astools_ctx *c, const char *model_output,
                                char **out_ref, char **out_command,
                                char **out_args_xcdn);
@@ -115,7 +115,7 @@ astools_err astools_call_format(astools_ctx *c, const char *ref,
                                 const struct astools_result_s *r,
                                 char **out_line);
 
-/* ---- invocation (§5) ----------------------------------------------------- */
+/* ---- invocation ----------------------------------------------------- */
 
 typedef struct astools_result_s {
   int      ok;            /* tool-level success                       */
@@ -126,12 +126,12 @@ typedef struct astools_result_s {
   uint64_t duration_ms;
 } astools_result;
 
-/* Validate args against the command schema without dispatching (§3.4). */
+/* Validate args against the command schema without dispatching. */
 astools_err astools_validate_args(astools_ctx *c, const char *ref,
                                   const char *command,
                                   const char *args_xcdn);
 
-/* Blocking invocation; deadline_ms = 0 -> command/config default (§5.5). */
+/* Blocking invocation; deadline_ms = 0 -> command/config default. */
 astools_err astools_invoke(astools_ctx *c, const char *ref,
                            const char *command, const char *args_xcdn,
                            uint32_t deadline_ms, astools_result *out);
@@ -148,7 +148,7 @@ astools_err astools_task_wait(astools_task *t, uint32_t timeout_ms,
 astools_err astools_task_cancel(astools_task *t);
 void        astools_task_free(astools_task *t);
 
-/* ---- sandbox / observability (§6.5, §16) --------------------------------- */
+/* ---- sandbox / observability --------------------------------- */
 
 typedef struct {
   int fs_confinement; /* 1 = kernel-enforced at the queried level */

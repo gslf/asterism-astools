@@ -1,9 +1,9 @@
 /*
- * sdk.h — shared plumbing of the astools-std multi-tool binary (§8).
+ * sdk.h — shared plumbing of the astools-std multi-tool binary.
  *
  * astools-std is one busybox-style executable dispatched on `--tool <id>`.
  * A tool invocation reads exactly one #tool_request from stdin, does its
- * work, and writes exactly one #tool_response to stdout (§5.2). This SDK
+ * work, and writes exactly one #tool_response to stdout. This SDK
  * owns the wire protocol so tool_*.c files contain only tool logic.
  *
  * Links xcdn only — never libastools (tools are ordinary packages).
@@ -41,7 +41,7 @@ int  astd_req_read(astd_req *r);
 void astd_req_free(astd_req *r);
 
 /* ---- argument accessors -------------------------------------------------
- * The runtime already validated and canonicalized args (§3.4, §6.4): types
+ * The runtime already validated and canonicalized args: types
  * are exact, defaults injected, paths absolute. Accessors therefore trust
  * the shape; dflt covers only genuinely absent optional params (possible
  * when a host runs with validation off). */
@@ -76,12 +76,12 @@ void astd_rfc3339(int64_t unix_s, char out[32]);
 char *astd_base64_encode(const uint8_t *data, size_t len);
 int   astd_base64_decode(const char *s, uint8_t **out, size_t *out_len);
 
-/* Shell-free glob match (§8.1 fs.list / §8.4 grep): '*' any run (not '/'),
+/* Shell-free glob match (fs.list / grep): '*' any run (not '/'),
  * '?' any char (not '/'), '['…']' classes; matched against the final path
  * component unless the pattern contains '/'. Returns 1 on match. */
 int astd_glob_match(const char *pattern, const char *path);
 
-/* 1 when buf[0..n) looks binary (NUL byte in the first 4 KiB) (§A1.2). */
+/* 1 when buf[0..n) looks binary (NUL byte in the first 4 KiB). */
 int astd_looks_binary(const char *buf, size_t n);
 
 /* ---- tool entry points (tool_*.c) ---------------------------------------
@@ -98,7 +98,7 @@ int astd_tool_git(astd_req *r);
 int astd_tool_net(astd_req *r);
 #endif
 
-/* ---- regex.c — in-house linear-time ERE subset (D13, §A1.6) -------------- */
+/* ---- regex.c — in-house linear-time ERE subset -------------- */
 
 typedef struct astd_regex astd_regex;
 

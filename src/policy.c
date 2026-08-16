@@ -1,5 +1,5 @@
 /*
- * policy.c — grants intersection and invocation pre-flight (§6.3–§6.4).
+ * policy.c — grants intersection and invocation pre-flight.
  *
  * SAFETY CRITICAL. Effective policy = manifest request ∩ host grants,
  * deny-by-default: a prefix that cannot be canonicalized is dropped (fewer
@@ -136,7 +136,7 @@ static astools_err canon_push(astools_ctx *c, const char *what,
   return perm_push(l, canon, access & ASTOOLS_ACCESS_RW);
 }
 
-/* ---- effective policy (§6.3) --------------------------------------------- */
+/* ---- effective policy --------------------------------------------- */
 
 astools_err astools_policy_effective(astools_ctx *c, const astools_tool *t,
                                      astools_effective *out) {
@@ -214,7 +214,7 @@ astools_err astools_policy_effective(astools_ctx *c, const astools_tool *t,
   }
 
   /* env: requested names ∩ union of granted names. A tool whose manifest
-   * requests env: [] cannot enumerate names up front (the env tool, §8.7:
+   * requests env: [] cannot enumerate names up front (the env tool:
    * "the grant list comes from the host"), so an EMPTY request means the
    * effective set is exactly what the operator granted to this tool —
    * still host-conceded, never manifest-widened. */
@@ -323,7 +323,7 @@ void astools_effective_free(astools_effective *eff) {
   memset(eff, 0, sizeof(*eff));
 }
 
-/* ---- pre-flight (§5.1 step 3 + §6.4) ------------------------------------- */
+/* ---- pre-flight (step 3 +) ------------------------------------- */
 
 /* Walk one typed value. Wrong node kinds and absent members are skipped:
  * schema validation already rejected them, and skipping cannot widen the

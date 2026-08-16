@@ -1,5 +1,5 @@
 /*
- * test_escape.c — basic-tier honesty suite (§6, §17): every escape the
+ * test_escape.c — basic-tier honesty suite: every escape the
  * pre-flight claims to stop must be stopped BEFORE anything is spawned,
  * and a timed-out child must not poison the context. Hermetic: tmpdirs
  * only, no network.
@@ -138,7 +138,7 @@ TEST(absolute_path_outside_workspace_denied) {
 #if !defined(_WIN32)
 TEST(symlink_inside_workspace_pointing_outside_denied) {
   /* ws/link -> outside; ws-relative "link/steal.txt" canonicalizes to the
-   * outside tree, which the grants do not cover (§6.4). */
+   * outside tree, which the grants do not cover. */
   esc_fx f;
   char link_path[600], rel[64];
   if (!esc_setup(&f)) {
@@ -190,7 +190,7 @@ TEST(write_to_new_file_under_workspace_allowed) {
 
 TEST(dotdot_inside_missing_tail_denied) {
   /* ".." smuggled into a not-yet-existing suffix must not textually
-   * cancel out (§6.4): rejected before spawn. */
+   * cancel out: rejected before spawn. */
   esc_fx f;
   astools_result r;
   astools_err e;

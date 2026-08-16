@@ -1,5 +1,5 @@
 /*
- * sdk.c — shared plumbing of the astools-std multi-tool binary (§5.2, §8).
+ * sdk.c — shared plumbing of the astools-std multi-tool binary.
  *
  * Owns the wire protocol: reads the single #tool_request from stdin and
  * emits the single #tool_response on stdout. All input is treated as
@@ -366,6 +366,8 @@ double astd_arg_num(const astd_req *r, const char *name, double dflt) {
  * 3339 representable range. */
 void astd_rfc3339(int64_t unix_s, char out[32]) {
   int64_t days, rem, z, era, doe, yoe, y, doy, mp, d, m;
+  uint16_t fy;
+  uint8_t fm, fd, fh, fmin, fs;
   if (!out) return;
   days = unix_s / 86400;
   rem = unix_s % 86400;
@@ -391,10 +393,15 @@ void astd_rfc3339(int64_t unix_s, char out[32]) {
     memcpy(out, "9999-12-31T23:59:59Z", 21);
     return;
   }
-  (void)snprintf(out, 32, "%04lld-%02lld-%02lldT%02lld:%02lld:%02lldZ",
-                 (long long)y, (long long)m, (long long)d,
-                 (long long)(rem / 3600), (long long)((rem / 60) % 60),
-                 (long long)(rem % 60));
+  fy = (uint16_t)y;
+  fm = (uint8_t)m;
+  fd = (uint8_t)d;
+  fh = (uint8_t)(rem / 3600);
+  fmin = (uint8_t)((rem / 60) % 60);
+  fs = (uint8_t)(rem % 60);
+  (void)snprintf(out, 32, "%04u-%02u-%02uT%02u:%02u:%02uZ", (unsigned)fy,
+                 (unsigned)fm, (unsigned)fd, (unsigned)fh, (unsigned)fmin,
+                 (unsigned)fs);
 }
 
 /* ---- Base64 (RFC 4648, strict) ------------------------------------------- */

@@ -1,7 +1,7 @@
 /*
  * test_types.c — types.c: #type parsing, strict validation, defaults
- * (§3.4, §17). Every kind gets accept + reject cases; validation is
- * strict with NO coercion (D8).
+ *. Every kind gets accept + reject cases; validation is
+ * strict with NO coercion.
  */
 
 #include "astools_test.h"
@@ -113,7 +113,7 @@ TEST(kind_number) {
 TEST(kind_boolean) {
   ACCEPT("{ kind: \"boolean\" }", "true");
   ACCEPT("{ kind: \"boolean\" }", "false");
-  /* 1 is not true (D8) */
+  /* 1 is not true */
   REJECT("{ kind: \"boolean\" }", "1");
   REJECT("{ kind: \"boolean\" }", "0");
   REJECT("{ kind: \"boolean\" }", "\"true\"");
@@ -125,7 +125,7 @@ TEST(kind_bytes) {
   ACCEPT("{ kind: \"bytes\" }", "b\"\"");
   REJECT("{ kind: \"bytes\" }", "\"aGk=\""); /* plain string is not bytes */
   REJECT("{ kind: \"bytes\" }", "3");
-  /* max_len counts DECODED bytes: "aGk=" = 2, "aGlp" = 3 (§3.4) */
+  /* max_len counts DECODED bytes: "aGk=" = 2, "aGlp" = 3 */
   ACCEPT("{ kind: \"bytes\", max_len: 2 }", "b\"aGk=\"");
   REJECT("{ kind: \"bytes\", max_len: 2 }", "b\"aGlp\"");
 }
@@ -133,9 +133,9 @@ TEST(kind_bytes) {
 TEST(kind_datetime) {
   ACCEPT("{ kind: \"datetime\" }", "t\"2026-01-01T00:00:00Z\"");
   ACCEPT("{ kind: \"datetime\" }", "t\"2026-01-01T02:00:00+02:00\"");
-  /* plain string never satisfies datetime (strict, D8) */
+  /* plain string never satisfies datetime (strict) */
   REJECT("{ kind: \"datetime\" }", "\"2026-01-01T00:00:00Z\"");
-  /* contract: §3.4 — t"…" content must be valid RFC 3339 */
+  /* contract: — t"…" content must be valid RFC 3339 */
   REJECT("{ kind: \"datetime\" }", "t\"not-a-date\"");
   REJECT("{ kind: \"datetime\" }", "t\"2026-13-01T00:00:00Z\"");
 }
@@ -144,7 +144,7 @@ TEST(kind_duration) {
   ACCEPT("{ kind: \"duration\" }", "r\"PT30S\"");
   ACCEPT("{ kind: \"duration\" }", "r\"P1DT1S\"");
   REJECT("{ kind: \"duration\" }", "\"PT30S\"");
-  /* contract: §3.4 — r"…" content must be a valid ISO 8601 duration
+  /* contract: — r"…" content must be a valid ISO 8601 duration
    * (months/years rejected per the time.c contract) */
   REJECT("{ kind: \"duration\" }", "r\"nope\"");
   REJECT("{ kind: \"duration\" }", "r\"P1M\"");
@@ -346,7 +346,7 @@ TEST(args_validate_happy_and_defaults) {
     fx_free(&fx);
     return;
   }
-  /* default injected for the absent optional (D8) */
+  /* default injected for the absent optional */
   b = xcdn_object_get(args->value, "b");
   if (!b || node_str(b) == NULL || strcmp(node_str(b), "dee") != 0) {
     ASTOOLS_FAILF("default for 'b' not injected");
@@ -357,7 +357,7 @@ TEST(args_validate_happy_and_defaults) {
 }
 
 TEST(args_validate_nested_default) {
-  /* contract: §3.4 D8 — tools always see a COMPLETE canonical args
+  /* contract: tools always see a COMPLETE canonical args
    * object, so defaults inject recursively into present object params. */
   cmd_fixture fx;
   xcdn_node_t *args;
@@ -428,7 +428,7 @@ TEST(args_validate_rejects) {
 
 /* Regression: hostile tool output (deep nesting) must not overflow the C
  * stack in the xCDN parser — it must be rejected as a parse error. A
- * compromised tool's stdout is attacker-controlled (§6.1). */
+ * compromised tool's stdout is attacker-controlled. */
 TEST(parser_depth_cap_rejects_deep_nesting) {
   size_t depth = 100000, i;
   char *buf = malloc(depth * 2 + 2);

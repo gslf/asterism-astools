@@ -1,6 +1,6 @@
 /*
- * types.c — the §3.4 type system: #type parsing, strict recursive value
- * validation (no coercion, D8), and default injection.
+ * types.c — the type system: #type parsing, strict recursive value
+ * validation (no coercion), and default injection.
  *
  * Everything parsed or checked here is hostile input (manifests, args).
  * Invariants kept throughout:
@@ -506,7 +506,7 @@ static astools_type *type_new(astools_tkind k) {
 }
 
 /* Parameter names: lowercase C-identifier style, at most 64 chars. Not a
- * slug (D7 is for tool/command names); underscores are the convention. */
+ * slug (is for tool/command names); underscores are the convention. */
 static bool param_name_ok(const char *s) {
   size_t i;
   if (!s || s[0] == '\0') return false;
@@ -685,7 +685,7 @@ static astools_type *type_parse_at(const xcdn_node_t *node, const char *ctx,
         tset_err(err, err_cap, "%s: array requires \"item\"", ctx);
         goto fail;
       }
-      snprintf(cbuf, sizeof cbuf, "%s.item", ctx);
+      snprintf(cbuf, sizeof cbuf, "%.185s.item", ctx);
       t->item = type_parse_at(in, cbuf, depth + 1, err, err_cap);
       if (!t->item) goto fail; /* err already set */
       if (!opt_nonneg(ov, ctx, "min_items", &t->min_items, err, err_cap))
@@ -706,7 +706,7 @@ static astools_type *type_parse_at(const xcdn_node_t *node, const char *ctx,
         tset_err(err, err_cap, "%s: map requires \"value\"", ctx);
         goto fail;
       }
-      snprintf(cbuf, sizeof cbuf, "%s.value", ctx);
+      snprintf(cbuf, sizeof cbuf, "%.185s.value", ctx);
       t->value = type_parse_at(vn, cbuf, depth + 1, err, err_cap);
       if (!t->value) goto fail;
       if (!opt_nonneg(ov, ctx, "max_entries", &t->max_entries, err,
@@ -738,7 +738,7 @@ static astools_type *type_parse_at(const xcdn_node_t *node, const char *ctx,
         }
         for (k = 0; k < n; k++) {
           char cbuf[192];
-          snprintf(cbuf, sizeof cbuf, "%s.fields[%zu]", ctx, k);
+          snprintf(cbuf, sizeof cbuf, "%.161s.fields[%zu]", ctx, k);
           if (!param_parse(fn->value->data.array.items[k], cbuf, depth,
                            &t->fields[k], err, err_cap))
             goto fail;
@@ -842,7 +842,7 @@ static bool param_parse(const xcdn_node_t *pn, const char *ctx, int depth,
     }
   }
 
-  /* examples are advisory (§3.4) and kept only in the manifest text. */
+  /* examples are advisory and kept only in the manifest text. */
   n = xcdn_object_get(ov, "examples");
   if (n && (!n->value || n->value->type != XCDN_VAL_ARRAY)) {
     tset_err(err, err_cap, "%s: \"examples\": expected array, got %s", ctx,
@@ -855,7 +855,7 @@ static bool param_parse(const xcdn_node_t *pn, const char *ctx, int depth,
     tset_err(err, err_cap, "%s: missing field \"type\"", ctx);
     goto fail;
   }
-  snprintf(cbuf, sizeof cbuf, "%s.type", ctx);
+  snprintf(cbuf, sizeof cbuf, "%.186s.type", ctx);
   out->type = type_parse_at(n, cbuf, depth + 1, err, err_cap);
   if (!out->type) goto fail;
 
@@ -873,8 +873,8 @@ static bool param_parse(const xcdn_node_t *pn, const char *ctx, int depth,
       goto fail;
     }
     /* Validate the stored default; the check also injects any nested
-     * defaults into our owned copy, canonicalizing it once (D8). */
-    snprintf(cbuf, sizeof cbuf, "%s.default", ctx);
+     * defaults into our owned copy, canonicalizing it once. */
+    snprintf(cbuf, sizeof cbuf, "%.183s.default", ctx);
     if (astools_type_check(out->type, out->dflt, cbuf, err, err_cap) !=
         ASTOOLS_OK)
       goto fail;
@@ -1054,7 +1054,7 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
       }
       return ASTOOLS_OK;
     case AT_PATH:
-      /* Schema check only; resolution + grants happen in policy (§6.4). */
+      /* Schema check only; resolution + grants happen in policy. */
       if (val->type != XCDN_VAL_STRING)
         return mismatch(ctx, "path (string)", val, err, err_cap);
       if (!val->data.string || val->data.string[0] == '\0') {
@@ -1125,7 +1125,7 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
           tset_err(err, err_cap, "%s: invalid map key", ctx);
           return ASTOOLS_ERR_INVALID;
         }
-        snprintf(cbuf, sizeof cbuf, "%s.%s", ctx, k);
+        snprintf(cbuf, sizeof cbuf, "%.110s.%.110s", ctx, k);
         e = astools_type_check(t->value, val->data.object.entries[i].node,
                                cbuf, err, err_cap);
         if (e != ASTOOLS_OK) return e;
@@ -1166,7 +1166,7 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
         }
         fnode = xcdn_object_get(val, p->name);
         if (fnode) {
-          snprintf(cbuf, sizeof cbuf, "%s.%s", ctx, p->name);
+          snprintf(cbuf, sizeof cbuf, "%.110s.%.110s", ctx, p->name);
           e = astools_type_check(p->type, fnode, cbuf, err, err_cap);
           if (e != ASTOOLS_OK) return e;
         } else if (p->required) {
@@ -1174,7 +1174,7 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
                    p->name);
           return ASTOOLS_ERR_INVALID;
         } else if (p->dflt) {
-          /* Inject the default so nested objects are canonical too (D8).
+          /* Inject the default so nested objects are canonical too.
            * v is const-qualified but the pointed-to value is mutable;
            * the contract requires this mutation. */
           e = obj_inject_default(v->value, p->name, p->dflt);
@@ -1194,7 +1194,7 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
   return ASTOOLS_ERR_INVALID;
 }
 
-/* ---- args validation (§5.1 step 2) --------------------------------------- */
+/* ---- args validation (step 2) --------------------------------------- */
 
 astools_err astools_args_validate(const astools_cmd *cmd, xcdn_node_t *args,
                                   char *err, size_t err_cap) {

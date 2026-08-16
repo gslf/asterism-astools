@@ -1,5 +1,5 @@
 /*
- * main.c — astools-check CLI (SPEC §A2.4): manifest schema + lint, catalog
+ * main.c — astools-check CLI: manifest schema + lint, catalog
  * and grammar rendering, lockfile approval, Agent Plugin lint.
  *
  * Exit codes: manifest mode returns the number of lint errors (2 on read/
@@ -262,7 +262,7 @@ static int cmd_approve(int argc, char **argv) {
   return 0;
 }
 
-/* ---- plugin lint (SPEC §A2.3) ------------------------------------------- */
+/* ---- plugin lint ------------------------------------------- */
 
 static void pl_bad(int *n, const char *clause, const char *fmt, ...) {
   va_list ap;

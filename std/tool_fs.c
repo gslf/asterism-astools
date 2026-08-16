@@ -1,8 +1,8 @@
 /*
- * tool_fs.c — the `fs` standard tool (§8.1): read / write / list / stat /
+ * tool_fs.c — the `fs` standard tool: read / write / list / stat /
  * mkdir / remove / move / copy inside the workspace.
  *
- * Path arguments arrive canonical and absolute from the runtime (§6.4)
+ * Path arguments arrive canonical and absolute from the runtime
  * and are used verbatim. Traversal (list/remove/copy) is lstat-based and
  * never follows symlinks.
  */
@@ -93,6 +93,10 @@ static void free_names(char **v, size_t n) {
   free(v);
 }
 
+static int name_cmp(const void *a, const void *b) {
+  return strcmp(*(char *const *)a, *(char *const *)b);
+}
+
 /* Read every entry name of a directory (minus "." and ".."), so callers
  * never mutate or recurse while a DIR handle is open (bounds fd usage).
  * Returns 0 with a malloc'd vector, or -1 with errno set. */
@@ -122,6 +126,7 @@ static int dir_names(const char *path, char ***out, size_t *out_n) {
     v[n++] = name;
   }
   closedir(d);
+  if (n > 1) qsort(v, n, sizeof *v, name_cmp);
   *out = v;
   *out_n = n;
   return 0;
@@ -425,13 +430,38 @@ static int ent_cmp(const void *a, const void *b) {
   return strcmp(x->name, y->name);
 }
 
+/* Keep only the lexicographically smallest `keep` entries.  This bounds
+ * memory to max_entries+1 (the extra item records truncation) while still
+ * producing the same globally sorted result for arbitrarily nested trees. */
+static int ent_keep(ent_vec *ev, char *name, const char *type, int64_t size,
+                    int64_t mtime, size_t keep) {
+  fs_ent *last;
+  if (ev->len < keep) {
+    if (ent_push(ev, name, type, size, mtime) != 0) return -1;
+    if (ev->len > 1) qsort(ev->v, ev->len, sizeof *ev->v, ent_cmp);
+    return 0;
+  }
+  last = &ev->v[ev->len - 1];
+  if (strcmp(name, last->name) >= 0) {
+    free(name);
+    return 0;
+  }
+  free(last->name);
+  last->name = name;
+  last->type = type;
+  last->size = size;
+  last->mtime = mtime;
+  qsort(ev->v, ev->len, sizeof *ev->v, ent_cmp);
+  return 0;
+}
+
 /* Collect entries under abs. rel is "" at the root; recursive entries are
- * named by their full relative path. Returns 0 on success, -1 after
- * having emitted an error response. Unreadable or vanished sub-entries
- * are skipped (races are inherent to listing). */
+ * named by their full relative path. Only the smallest limit+1 matches are
+ * retained. Returns 0 on success, -1 after an error response. Unreadable or
+ * vanished sub-entries are skipped. */
 static int list_walk(astd_req *r, const char *abs, const char *rel,
                      int recursive, const char *glob, int depth,
-                     ent_vec *ev) {
+                     size_t limit, ent_vec *ev) {
   char **names = NULL;
   size_t n = 0, i;
 
@@ -466,7 +496,8 @@ static int list_walk(astd_req *r, const char *abs, const char *rel,
       continue;
     }
     if (recursive && S_ISDIR(st.st_mode) && depth < FS_MAX_DEPTH) {
-      if (list_walk(r, full, reln, recursive, glob, depth + 1, ev) != 0) {
+      if (list_walk(r, full, reln, recursive, glob, depth + 1, limit, ev) !=
+          0) {
         free(full);
         free(reln);
         free_names(names, n);
@@ -475,8 +506,8 @@ static int list_walk(astd_req *r, const char *abs, const char *rel,
     }
     free(full);
     if (!glob || astd_glob_match(glob, reln)) {
-      if (ent_push(ev, reln, mode_type(st.st_mode), (int64_t)st.st_size,
-                   (int64_t)st.st_mtime) != 0) {
+      if (ent_keep(ev, reln, mode_type(st.st_mode), (int64_t)st.st_size,
+                   (int64_t)st.st_mtime, limit + 1) != 0) {
         free_names(names, n);
         fail_oom(r);
         return -1;
@@ -556,9 +587,15 @@ static int cmd_list(astd_req *r) {
     astd_fail(r, "astools/invalid-args", "max_entries must be >= 0");
     return 0;
   }
-  if (list_walk(r, path, "", recursive, glob, 0, &ev) != 0) {
-    ent_vec_free(&ev);
-    return 0;
+  {
+    size_t limit = (uint64_t)max_entries >= (uint64_t)SIZE_MAX
+                       ? SIZE_MAX - 1
+                       : (size_t)max_entries;
+    int wr = list_walk(r, path, "", recursive, glob, 0, limit, &ev);
+    if (wr < 0) {
+      ent_vec_free(&ev);
+      return 0;
+    }
   }
   if (ev.len > 1) qsort(ev.v, ev.len, sizeof *ev.v, ent_cmp);
   emit_n = ev.len;
@@ -820,7 +857,7 @@ static int copy_file(astd_req *r, const char *src, const char *dst,
   }
   /* O_NOFOLLOW: during a recursive copy the per-entry destination paths are
    * never seen by the runtime pre-flight, so a symlink planted at the leaf
-   * must not be followed out of the granted tree (§6.4 containment). */
+   * must not be followed out of the granted tree (containment). */
   dfd = open(dst, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, st.st_mode & 0777);
   if (dfd < 0) {
     int e = errno;
@@ -933,7 +970,7 @@ static int copy_tree(astd_req *r, const char *src, const char *dst,
     }
     /* lstat, not stat: a symlinked directory in the destination tree must
      * be refused, never descended — following it would let the recursion
-     * write outside the granted subtree (§6.4). */
+     * write outside the granted subtree. */
     if (lstat(dst, &dstat) != 0 || !S_ISDIR(dstat.st_mode)) {
       if (lstat(dst, &dstat) == 0 && S_ISLNK(dstat.st_mode))
         astd_fail(r, "fs/denied",

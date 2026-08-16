@@ -1,6 +1,6 @@
 /*
  * proto.c — wire protocol: #tool_request / #tool_response / #tool_hello /
- * #tool_cancel build and parse (§5.2, §5.3, Appendix B).
+ * #tool_cancel build and parse.
  *
  * All tool output is hostile input: every shape is checked before use and
  * nothing is written into caller structures until the whole message has
@@ -758,7 +758,7 @@ done:
   return e;
 }
 
-/* ---- persistent-mode messages (§5.3) ------------------------------------- */
+/* ---- persistent-mode messages ------------------------------------- */
 
 astools_err astools_proto_parse_hello(const char *text, size_t len,
                                       const astools_tool *t, char **err_msg) {

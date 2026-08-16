@@ -1,4 +1,4 @@
-// astools standard suite — proc (SPEC §8.7): run programs.
+// astools standard suite — proc: run programs.
 // One busybox-style binary dispatched with `--tool proc`. Besides the
 // three release platforms, two extra dev entries (macos/x86_64,
 // linux/arm64) keep the tool available on every common dev machine.
@@ -6,7 +6,7 @@
 // proc requests the deny-by-default `proc` capability: without an
 // explicit operator grant every call is denied in pre-flight. The fs read
 // request on ${workspace} exists solely so the optional cwd path argument
-// can be canonicalized and grant-checked (§6.4).
+// can be canonicalized and grant-checked.
 
 #astools_tool {
   manifest_version: 1,

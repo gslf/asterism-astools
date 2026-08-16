@@ -1,6 +1,6 @@
 /*
  * test_policy.c — policy.c: grants intersection + invocation pre-flight
- * (§6.3–§6.4, §17). Runs over a real context (astools_open on a tmp
+ *. Runs over a real context (astools_open on a tmp
  * workspace + registry) so the effective policy is computed exactly as in
  * production; nothing is ever spawned (dummy package-relative binaries).
  */
@@ -195,7 +195,7 @@ TEST(preflight_replaces_path_with_canonical) {
     ASTOOLS_FAILF("preflight denied: %s", deny ? deny : "(no message)");
     goto out;
   }
-  /* the canonical absolute path REPLACED the original inside args (§6.4) */
+  /* the canonical absolute path REPLACED the original inside args */
   snprintf(want, sizeof want, "%s/sub/data.txt", f.ws);
   if (obj_string(args, "p") == NULL ||
       strcmp(obj_string(args, "p"), want) != 0) {
@@ -244,7 +244,7 @@ TEST(preflight_denies_outside_grants) {
     ASTOOLS_FAILF("expected DENIED, got %s", astools_err_name(e));
     goto out;
   }
-  /* actionable message: names the missing grant (§6.3) */
+  /* actionable message: names the missing grant */
   if (deny == NULL || strstr(deny, "grant") == NULL) {
     ASTOOLS_FAILF("deny message not actionable: %s",
                 deny ? deny : "(null)");

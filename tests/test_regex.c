@@ -1,6 +1,6 @@
 /*
- * test_regex.c — std/regex.c: in-house linear-time ERE subset (D13,
- * §A1.6). Compiled against std/regex.c directly through std/sdk.h.
+ * test_regex.c — std/regex.c: in-house linear-time ERE subset. Compiled
+ * against std/regex.c directly through std/sdk.h.
  */
 
 #include "astools_test.h"
@@ -166,7 +166,7 @@ TEST(rejects_unsupported_constructs) {
 TEST(pathological_pattern_is_linear) {
   /* (a|a|a|a)*b against 'aaaa…' explodes exponentially on a backtracker;
    * the linear engine must finish instantly (CTest TIMEOUT 60 is the
-   * hard backstop). ~2KB input per §17 guidance. */
+   * hard backstop). ~2KB input per guidance. */
   char input[2049];
   size_t s, e;
   const char *err = NULL;

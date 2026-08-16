@@ -1,12 +1,12 @@
 /*
- * config.c — configuration defaults + config.xcdn loading (§12).
+ * config.c — configuration defaults + config.xcdn loading.
  *
  * astools_config_load merges a parsed #astools_config document over a cfg
  * that MUST already hold astools_config_defaults() output. Unknown keys,
  * wrong value types and unknown enum values are hard errors
  * (ASTOOLS_ERR_CONFIG) so a typo cannot silently weaken a safety-relevant
  * setting. A missing file is tolerated even for an explicit path
- * (A2 §A2.3.4: builtin defaults, never create). After a load — successful,
+ * (builtin defaults, never create). After a load — successful,
  * defaulted, or file-missing — the ASTOOLS_PATH environment entries are
  * prepended to registry.paths as standard-trust roots, first in order.
  */
@@ -130,7 +130,7 @@ static astools_err get_int(const xcdn_node_t *n, const char *key, int64_t minv,
 }
 
 /* Duration literal r"..." parsed to milliseconds; must be strictly
- * positive (every §12 duration is a period, never zero). */
+ * positive (every duration is a period, never zero). */
 static astools_err get_duration_ms(const xcdn_node_t *n, const char *key,
                                    int64_t *out_ms, char **err_msg) {
   const xcdn_value_t *v = n ? n->value : NULL;
@@ -844,7 +844,7 @@ static astools_err parse_sec_logging(const xcdn_value_t *v,
   return ASTOOLS_OK;
 }
 
-/* ---- ASTOOLS_PATH prepend (§4.1) ---------------------------------------- */
+/* ---- ASTOOLS_PATH prepend ---------------------------------------- */
 
 /* Env roots go first, in list order, at trust "standard". Empty segments
  * are skipped. On OOM the existing root list is left untouched. */
@@ -967,7 +967,7 @@ void astools_config_defaults(astools_config *cfg) {
 
 /* cfg must already hold astools_config_defaults() output. NULL path and
  * missing files load nothing (defaults stand); both still receive the
- * ASTOOLS_PATH prepend. explicit_path does not change tolerance (A2). */
+ * ASTOOLS_PATH prepend. explicit_path does not change tolerance. */
 astools_err astools_config_load(const char *path, bool explicit_path,
                                 astools_config *cfg, char **err_msg) {
   char *text = NULL;
@@ -981,7 +981,7 @@ astools_err astools_config_load(const char *path, bool explicit_path,
 
   if (err_msg) *err_msg = NULL;
   if (!cfg) return ASTOOLS_ERR_INVALID;
-  (void)explicit_path; /* missing files tolerated in both modes (A2) */
+  (void)explicit_path; /* missing files tolerated in both modes */
 
   if (!path || path[0] == '\0') return prepend_env_paths(cfg, err_msg);
 

@@ -1,7 +1,7 @@
 /*
- * registry.c — roots scan, table publish, resolution (§4).
+ * registry.c — roots scan, table publish, resolution.
  *
- * Scan protocol (§4.2): candidates are built and hashed without holding
+ * Scan protocol: candidates are built and hashed without holding
  * c->lock (cfg is immutable after open); the new table, lockfile snapshot,
  * fingerprint and stats are published in one write-locked swap, and the
  * replaced descriptors are unrefed only after the lock is released.
@@ -39,7 +39,7 @@ const char *astools_plat_arch(void) {
 
 /* One process-wide mutex serializes refcount updates across contexts:
  * resolve refs under a SHARED read lock (no mutual exclusion) and
- * invocations unref with no context lock held at all (§9). */
+ * invocations unref with no context lock held at all. */
 #if defined(ASTOOLS_NO_THREADS)
 
 static void ref_global_init(void) {}
@@ -99,7 +99,7 @@ void astools_tool_unref(astools_tool *t) {
 
 /* ---- shared predicates --------------------------------------------------- */
 
-/* §4.1 package-relative: contains a path separator, is not absolute (no
+/* package-relative: contains a path separator, is not absolute (no
  * leading separator, no drive prefix), and has no ".." component. */
 static bool pkg_relative(const char *p) {
   size_t i = 0;
@@ -125,54 +125,6 @@ static int cmp_name(const void *a, const void *b) {
   return strcmp(*(char *const *)a, *(char *const *)b);
 }
 
-/* ---- scan fingerprint (§4.3) --------------------------------------------- */
-
-static uint64_t fnv_step(uint64_t h, const void *data, size_t len) {
-  const uint8_t *p = (const uint8_t *)data;
-  size_t i;
-  for (i = 0; i < len; i++) {
-    h ^= p[i];
-    h *= UINT64_C(0x100000001b3);
-  }
-  return h;
-}
-
-/* FNV-1a over (path, mtime) of every root and every package dir; subdirs
- * are visited in sorted order so the value is stable across scans. */
-static uint64_t scan_fp_compute(const astools_config *cfg) {
-  uint64_t h = UINT64_C(0xcbf29ce484222325);
-  size_t r, i;
-  for (r = 0; r < cfg->reg_paths_len; r++) {
-    const char *root = cfg->reg_paths[r].path;
-    os_stat_info st;
-    char **names = NULL;
-    size_t n = 0;
-    int64_t mt;
-    if (!root) continue;
-    memset(&st, 0, sizeof st);
-    if (os_stat(root, &st) != ASTOOLS_OK) st.mtime_unix = 0;
-    h = fnv_step(h, root, strlen(root) + 1);
-    mt = st.mtime_unix;
-    h = fnv_step(h, &mt, sizeof mt);
-    if (os_list_subdirs(root, &names, &n) != ASTOOLS_OK) continue;
-    if (n > 1) qsort(names, n, sizeof *names, cmp_name);
-    for (i = 0; i < n; i++) {
-      char *pkg = os_path_join(root, names[i]);
-      if (pkg) {
-        memset(&st, 0, sizeof st);
-        if (os_stat(pkg, &st) != ASTOOLS_OK) st.mtime_unix = 0;
-        h = fnv_step(h, pkg, strlen(pkg) + 1);
-        mt = st.mtime_unix;
-        h = fnv_step(h, &mt, sizeof mt);
-        free(pkg);
-      }
-      free(names[i]);
-    }
-    free(names);
-  }
-  return h;
-}
-
 /* ---- candidate construction ---------------------------------------------- */
 
 typedef struct {
@@ -193,7 +145,7 @@ static astools_err vec_push(tool_vec *tv, astools_tool *t) {
 }
 
 /* Parse one package dir into a descriptor, or NULL with a WARN log for
- * every reject (§4.2: never fatal). A missing manifest.xcdn means "not a
+ * every reject (never fatal). A missing manifest.xcdn means "not a
  * package" and is skipped silently. */
 static astools_tool *load_package(astools_ctx *c, const astools_root *root,
                                   const char *pkg_dir) {
@@ -201,6 +153,8 @@ static astools_tool *load_package(astools_ctx *c, const astools_root *root,
   size_t len = 0, i;
   astools_manifest *m;
   astools_tool *t;
+  astools_sha256_ctx content_hash;
+  uint8_t manifest_hash[32];
   bool plat_ok;
   astools_err e;
 
@@ -220,6 +174,7 @@ static astools_tool *load_package(astools_ctx *c, const astools_root *root,
     return NULL;
   }
 
+  astools_sha256(text, len, manifest_hash);
   m = astools_manifest_parse(text, len, c->workspace, &err_msg);
   free(text);
   if (!m) {
@@ -229,7 +184,7 @@ static astools_tool *load_package(astools_ctx *c, const astools_root *root,
     return NULL;
   }
 
-  /* §4.1 trust gates */
+  /* trust gates */
   if (m->kind == ASTOOLS_KIND_LIBRARY && root->trust != ASTOOLS_TRUST_FULL) {
     astools_log(c, ASTOOLS_LOG_WARN, "registry",
                 "rejected package '%s': kind \"library\" requires a "
@@ -279,6 +234,27 @@ static astools_tool *load_package(astools_ctx *c, const astools_root *root,
   t->trust = root->trust;
   t->refcount = 1; /* the table's ref */
 
+  /* Content identity drives list_changed.  Include each package-relative
+   * runtime artifact, because changing a binary without touching its parent
+   * directory is a real registry change too. */
+  astools_sha256_init(&content_hash);
+  astools_sha256_update(&content_hash, manifest_hash, sizeof manifest_hash);
+  for (i = 0; i < m->entries_len; i++) {
+    const char *a0 = m->entries[i].argv_len ? m->entries[i].argv[0] : NULL;
+    uint8_t artifact_hash[32] = {0};
+    char *full;
+    if (!a0 || !pkg_relative(a0)) continue;
+    astools_sha256_update(&content_hash, a0, strlen(a0) + 1);
+    full = os_path_join(pkg_dir, a0);
+    if (full) {
+      (void)astools_sha256_file(full, artifact_hash);
+      free(full);
+    }
+    astools_sha256_update(&content_hash, artifact_hash,
+                          sizeof artifact_hash);
+  }
+  astools_sha256_final(&content_hash, t->content_sha256);
+
   plat_ok = (m->platforms_len == 0);
   for (i = 0; i < m->platforms_len; i++)
     if (m->platforms[i] && strcmp(m->platforms[i], astools_plat_os()) == 0)
@@ -297,16 +273,25 @@ reject:
   return NULL;
 }
 
-/* ---- table comparison (§4.3 list_changed) -------------------------------- */
+/* ---- table comparison (list_changed) -------------------------------- */
 
 static char *tool_key(const astools_tool *t) {
   astools_buf b;
   astools_buf_init(&b);
-  if (astools_buf_printf(&b, "%s@%s:%d:%s", t->m->id, t->m->version,
+  if (astools_buf_printf(&b, "%s@%s:%d:%s:", t->m->id, t->m->version,
                          t->enabled ? 1 : 0,
                          t->pkg_dir ? t->pkg_dir : "") != ASTOOLS_OK) {
     astools_buf_free(&b);
     return NULL;
+  }
+  {
+    size_t i;
+    for (i = 0; i < sizeof t->content_sha256; i++)
+      if (astools_buf_printf(&b, "%02x", (unsigned)t->content_sha256[i]) !=
+          ASTOOLS_OK) {
+        astools_buf_free(&b);
+        return NULL;
+      }
   }
   return astools_buf_detach(&b);
 }
@@ -355,7 +340,7 @@ done:
 
 /* ---- lock path ----------------------------------------------------------- */
 
-/* Relative lock_path resolves against the config dir (internal.h §4.4). */
+/* Relative lock_path resolves against the config dir (internal.h). */
 static char *lock_path_abs(const astools_config *cfg) {
   const char *lp =
       cfg->lock_path && cfg->lock_path[0] ? cfg->lock_path : "astools.lock.xcdn";
@@ -373,7 +358,7 @@ astools_err astools_registry_scan(astools_ctx *c, int *out_changed) {
   astools_tool **old = NULL;
   size_t old_n = 0, r, i, j;
   size_t n_enabled = 0, n_unavail = 0;
-  uint64_t fp;
+  uint64_t fp = 0;
   int changed;
   astools_err e = ASTOOLS_OK;
 
@@ -439,7 +424,7 @@ astools_err astools_registry_scan(astools_ctx *c, int *out_changed) {
   }
   if (e != ASTOOLS_OK) goto fail;
 
-  /* phase 2: lockfile policy (§4.4) */
+  /* phase 2: lockfile policy */
   lpath = lock_path_abs(&c->cfg);
   if (!lpath) {
     e = ASTOOLS_ERR_NOMEM;
@@ -471,8 +456,13 @@ astools_err astools_registry_scan(astools_ctx *c, int *out_changed) {
                       : "is not recorded");
   }
 
-  /* phase 3: fingerprint of the tree just visited */
-  fp = scan_fp_compute(&c->cfg);
+  /* phase 3: compact fingerprint retained for diagnostics.  Change
+   * detection below compares the full content identities. */
+  for (i = 0; i < tv.n; i++) {
+    uint64_t part;
+    memcpy(&part, tv.v[i]->content_sha256, sizeof part);
+    fp ^= part;
+  }
 
   /* phase 4: publish atomically */
   os_rwlock_wrlock(&c->lock);
@@ -529,7 +519,7 @@ fail:
                         astools_err_name(e));
 }
 
-/* ---- resolution (§3.7, §5.1 step 1) -------------------------------------- */
+/* ---- resolution (step 1) -------------------------------------- */
 
 /* Bare-ref ordering: any release beats any pre-release; within the same
  * class the higher SemVer wins. */
@@ -579,7 +569,7 @@ astools_err astools_registry_resolve(astools_ctx *c, const char *ref,
   }
 
   if (!verstr) {
-    /* config pins override bare refs (§3.7) */
+    /* config pins override bare refs */
     for (i = 0; i < c->cfg.pins_len; i++) {
       if (c->cfg.pins[i].tool && c->cfg.pins[i].version &&
           strcmp(c->cfg.pins[i].tool, id) == 0) {
@@ -668,22 +658,30 @@ astools_err astools_registry_resolve(astools_ctx *c, const char *ref,
   return e;
 }
 
-/* ---- poll (§4.3) --------------------------------------------------------- */
+/* ---- poll --------------------------------------------------------- */
 
 int astools_registry_poll_due(astools_ctx *c) {
   int64_t last;
-  uint64_t fp;
-  int due;
 
   if (!c || !c->cfg.watch_poll) return 0;
   os_rwlock_rdlock(&c->lock);
   last = c->last_scan_mono;
   os_rwlock_rdunlock(&c->lock);
-  if (astools_mono(c) - last < c->cfg.poll_interval_ms) return 0;
-  /* recompute with no locks held: touches only cfg roots + dir listings */
-  fp = scan_fp_compute(&c->cfg);
+  return astools_mono(c) - last >= c->cfg.poll_interval_ms;
+}
+
+astools_err astools_registry_revalidate(astools_ctx *c,
+                                        const astools_tool *t) {
+  astools_lock_state state;
+  if (!c || !t) return ASTOOLS_ERR_INVALID;
+  if (c->cfg.pinning != ASTOOLS_PIN_ENFORCE) return ASTOOLS_OK;
   os_rwlock_rdlock(&c->lock);
-  due = (fp != c->scan_fingerprint);
+  state = astools_lockfile_check(&c->lockfile, t->m->id, t->m->version,
+                                 t->pkg_dir, t->m);
   os_rwlock_rdunlock(&c->lock);
-  return due;
+  if (state == ASTOOLS_LOCK_OK) return ASTOOLS_OK;
+  return astools_seterr(c, ASTOOLS_ERR_DENIED,
+                        "tool '%s@%s' changed after registry validation; "
+                        "execution denied by pinning=\"enforce\"",
+                        t->m->id, t->m->version);
 }

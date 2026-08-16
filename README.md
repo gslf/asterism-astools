@@ -1,17 +1,9 @@
-# astools
+# ⁂ astools
 
-⁂ **astools** — Asterism Tools, a local, plug-and-play system-tool registry
-for LLM agents. Where its sibling [Asper](../asterism-asper) (Asterism
-Persistence) remembers, astools acts.
+⁂ Asterism Tools, a local, plug-and-play system-tool registry for LLM agents.
 
-A *tool* is a directory dropped into a registry root. One xCDN manifest
-inside it is simultaneously the machine contract (commands, typed
-parameters, constraints, permissions) and the conversational interface
-(descriptions and worked examples the model reads). No tool-specific code
-exists in the host, in `libastools`, or in the MCP server: adding a
-capability to an agent is copying a directory.
+A *tool* is a directory dropped into a registry root. One xCDN manifest inside it is simultaneously the machine contract (commands, typed parameters, constraints, permissions) and the conversational interface (descriptions and worked examples the model reads).
 
-*per aspera ad astra*
 
 ## What ships
 
@@ -33,15 +25,9 @@ cmake --build build -j
 ctest --test-dir build
 ```
 
-Requires CMake ≥ 3.16 and a C99 toolchain. The only dependency is the
-[xCDN-C](https://github.com/gslf/xCDN-C) submodule; the MCP JSON codec is
-in-house. `libastools` performs no network I/O and links no networking code.
-CMake applies four local xCDN-C fixes at configure time (idempotent,
-self-detecting) — see [docs/XCDN-MODS.md](docs/XCDN-MODS.md).
+Requires CMake ≥ 3.16 and a C99 toolchain. The only dependency is the [xCDN-C](https://github.com/gslf/xCDN-C) submodule; the MCP JSON codec is in-house. `libastools` performs no network I/O and links no networking code. The pinned xCDN-C revision includes the parser and allocation hardening required by astools.
 
-Options: `ASTOOLS_BUILD_MCP` / `ASTOOLS_BUILD_STD` / `ASTOOLS_BUILD_CHECK` /
-`ASTOOLS_BUILD_TESTS` / `ASTOOLS_BUILD_PLUGIN` (ON), `ASTOOLS_BUILD_NET` /
-`ASTOOLS_NO_THREADS` / `ASTOOLS_SANITIZERS` (OFF).
+Options: `ASTOOLS_BUILD_MCP` / `ASTOOLS_BUILD_STD` / `ASTOOLS_BUILD_CHECK` / `ASTOOLS_BUILD_TESTS` / `ASTOOLS_BUILD_PLUGIN` (ON), `ASTOOLS_BUILD_NET` / `ASTOOLS_NO_THREADS` / `ASTOOLS_SANITIZERS` (OFF).
 
 ## Quick start
 
@@ -76,19 +62,11 @@ astools_invoke(c, "fs", "read", "{path: \"notes/todo.txt\"}", 0, &r);
 
 ## Safety model
 
-Deny by default: a manifest *requests* permissions, only the host *grants*
-them, and the effective set is the intersection. Every executable tool runs
-as a child process with a scrubbed environment, a private scratch cwd, a
-wall-clock deadline, and output caps; `path`-typed arguments are
-canonicalized and checked against the grants before anything spawns. The
-`strict` sandbox level adds kernel enforcement where the platform provides
-it (Seatbelt on macOS), and `astools_get_sandbox_caps` reports honestly
-what is actually enforced.
+Deny by default: a manifest *requests* permissions, only the host *grants* them, and the effective set is the intersection. Every executable tool runs as a child process with a scrubbed environment, a private scratch cwd, a wall-clock deadline, and output caps; `path`-typed arguments are canonicalized and checked against the grants before anything spawns. The `strict` sandbox level adds kernel enforcement where the platform provides it (Seatbelt on macOS), and `astools_get_sandbox_caps` reports honestly what is actually enforced.
 
 ## Status
 
-v0.3 (spec: `docs/SPEC.md`). POSIX-first: macOS and Linux build and test;
-the Windows backend is stubbed honestly (`ASTOOLS_ERR_UNSUPPORTED`).
+v0.3 (spec: `docs/SPEC.md`). POSIX-first: macOS and Linux build and test; the Windows backend is stubbed honestly (`ASTOOLS_ERR_UNSUPPORTED`).
 
 ## License
 

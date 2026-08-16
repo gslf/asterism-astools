@@ -1,5 +1,5 @@
 /*
- * callline.c — CALL/RESULT/ERROR line handling (§7.2).
+ * callline.c — CALL/RESULT/ERROR line handling.
  *
  * Parsing: model output is scanned line by line; after optional leading
  * spaces/tabs a line must start with the exact word "CALL " to count.

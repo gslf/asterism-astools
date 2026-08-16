@@ -1,5 +1,5 @@
 /*
- * api.c — public API funnel and context lifecycle (§10).
+ * api.c — public API funnel and context lifecycle.
  *
  * Every astools.h entry point validates its arguments, funnels into the
  * owning module (registry.c, invoke.c, catalog.c, ...) and reports engine
@@ -34,6 +34,38 @@ static const char *const err_names[] = {
   "ASTOOLS_ERR_NOMEM"
 };
 
+#if defined(_MSC_VER)
+#define ASTOOLS_TLS __declspec(thread)
+#elif defined(__GNUC__) || defined(__clang__)
+#define ASTOOLS_TLS __thread
+#else
+#define ASTOOLS_TLS _Thread_local
+#endif
+
+typedef struct {
+  const astools_ctx *ctx;
+  unsigned age;
+  char text[512];
+} err_tls_slot;
+
+/* A small per-thread context map keeps astools_last_error both race-free and
+ * context-specific without adding allocation or process-global state. */
+static ASTOOLS_TLS err_tls_slot g_err_tls[8];
+static ASTOOLS_TLS unsigned g_err_age;
+
+static err_tls_slot *err_tls_get(const astools_ctx *c, int create) {
+  size_t i, victim = 0;
+  for (i = 0; i < sizeof g_err_tls / sizeof g_err_tls[0]; i++) {
+    if (g_err_tls[i].ctx == c) return &g_err_tls[i];
+    if (!g_err_tls[i].ctx) victim = i;
+    else if (g_err_tls[i].age < g_err_tls[victim].age) victim = i;
+  }
+  if (!create) return NULL;
+  g_err_tls[victim].ctx = c;
+  g_err_tls[victim].text[0] = '\0';
+  return &g_err_tls[victim];
+}
+
 const char *astools_err_name(astools_err e) {
   if ((int)e < 0 ||
       (size_t)e >= sizeof err_names / sizeof err_names[0])
@@ -44,20 +76,35 @@ const char *astools_err_name(astools_err e) {
 astools_err astools_seterr(astools_ctx *c, astools_err e, const char *fmt,
                            ...) {
   va_list ap;
+  char text[512] = {0};
+  err_tls_slot *slot;
   if (!c || !fmt) return e;
-  os_mutex_lock(&c->err_mu);
   va_start(ap, fmt);
-  vsnprintf(c->err_buf, sizeof c->err_buf, fmt, ap);
+  vsnprintf(text, sizeof text, fmt, ap);
   va_end(ap);
+  os_mutex_lock(&c->err_mu);
+  memcpy(c->err_buf, text, sizeof text);
   os_mutex_unlock(&c->err_mu);
+  slot = err_tls_get(c, 1);
+  if (slot) {
+    memcpy(slot->text, text, sizeof text);
+    slot->age = ++g_err_age;
+  }
   return e;
 }
 
 const char *astools_last_error(const astools_ctx *c) {
-  /* Mild by-design race (§10): a concurrent failing call on another
-   * thread may rewrite the buffer while the caller reads it; the pointer
-   * itself stays valid for the context lifetime. */
-  return c ? c->err_buf : "";
+  err_tls_slot *slot;
+  if (!c) return "";
+  slot = err_tls_get(c, 1);
+  if (!slot) return "";
+  if (slot->text[0] == '\0') {
+    os_mutex_lock((os_mutex *)&c->err_mu);
+    memcpy(slot->text, c->err_buf, sizeof slot->text);
+    os_mutex_unlock((os_mutex *)&c->err_mu);
+  }
+  slot->age = ++g_err_age;
+  return slot->text;
 }
 
 int64_t astools_mono(astools_ctx *c) {
@@ -151,7 +198,7 @@ astools_err astools_open(const astools_open_params *p, astools_ctx **out) {
 
   /* 3. parameter overrides. Param roots are ADDITIVE: they are searched
    * first (standard trust), ahead of the ASTOOLS_PATH and config roots —
-   * §A2.3.4 precedence, and the semantics astools-mcp relies on. */
+   * precedence, and the semantics astools-mcp relies on. */
   if (p && p->registry_paths) {
     size_t n = 0, i;
     astools_root *roots;
@@ -212,7 +259,7 @@ astools_err astools_open(const astools_open_params *p, astools_ctx **out) {
     goto fail;
   }
 
-  /* 5. file log sink — IO failure degrades to callback-only (§16) */
+  /* 5. file log sink — IO failure degrades to callback-only */
   if (astools_log_open(c) != ASTOOLS_OK)
     astools_log(c, ASTOOLS_LOG_WARN, "config",
                 "cannot open log file '%s'; file sink disabled",
@@ -384,7 +431,7 @@ astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on) {
     if (ver && strcmp(t->m->version, ver) != 0) continue;
     t->host_disabled = (on == 0);
     /* Mirror registry.c: enabled = host toggle AND pinning gate; under
-     * "enforce" only a hash-verified lockfile entry passes (§4.4). */
+     * "enforce" only a hash-verified lockfile entry passes. */
     t->enabled = !t->host_disabled &&
                  !(c->cfg.pinning == ASTOOLS_PIN_ENFORCE &&
                    t->lock_state != ASTOOLS_LOCK_OK);
@@ -440,7 +487,7 @@ static astools_err find_tool_admin(astools_ctx *c, const char *ref,
     } else if (!best) {
       best = t;
     } else {
-      /* highest version, releases preferred over pre-releases (§3.7) */
+      /* highest version, releases preferred over pre-releases */
       bool best_pre = best->ver.prerelease != NULL;
       bool cand_pre = t->ver.prerelease != NULL;
       if ((best_pre && !cand_pre) ||

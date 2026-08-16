@@ -1,4 +1,4 @@
-// astools standard suite — fs (SPEC §8.1): files in the workspace.
+// astools standard suite — fs: files in the workspace.
 // The package ships one busybox-style binary; every entry dispatches it
 // with `--tool fs`. Besides the three release platforms, two extra dev
 // entries (macos/x86_64, linux/arm64) keep the tool available on every

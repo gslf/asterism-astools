@@ -1,9 +1,9 @@
 /*
  * test_std_containment.c — security regressions for the std tools' own
- * §6.4 containment (the paths the runtime pre-flight cannot see):
+ * containment (the paths the runtime pre-flight cannot see):
  *   - edit.patch resolves diff-internal target paths through the kernel and
- *     refuses a workspace symlink that escapes the tree (SPEC §8.5).
- *   - fs.copy never follows a destination symlink during recursion (§6.4).
+ *     refuses a workspace symlink that escapes the tree.
+ *   - fs.copy never follows a destination symlink during recursion.
  * Both run against the REAL astools-std packages (ASTOOLS_STD_PACKAGES).
  */
 
@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "astools.h"
+#include "os.h"
 
 #ifndef ASTOOLS_STD_PACKAGES
 #define ASTOOLS_STD_PACKAGES "packages"
@@ -32,7 +33,7 @@ static int write_file(const char *path, const char *data) {
 }
 
 TEST(edit_patch_symlink_escape_is_contained) {
-  char root[256], ws[256], outside[256], p[512], target[512];
+  char root[256], ws[512], outside[512], p[1024], target[1024];
   const char *roots[2];
   astools_open_params op;
   astools_ctx *c = NULL;
@@ -79,7 +80,7 @@ TEST(edit_patch_symlink_escape_is_contained) {
 }
 
 TEST(fs_copy_destination_symlink_is_contained) {
-  char root[256], ws[256], outside[256], p[512], target[512];
+  char root[256], ws[512], outside[512], p[1024], target[1024];
   const char *roots[2];
   astools_open_params op;
   astools_ctx *c = NULL;
@@ -130,7 +131,7 @@ TEST(fs_copy_destination_symlink_is_contained) {
 }
 
 TEST(edit_patch_legit_in_workspace_still_applies) {
-  char root[256], ws[256], p[512];
+  char root[256], ws[512], p[1024];
   const char *roots[2];
   astools_open_params op;
   astools_ctx *c = NULL;
@@ -167,10 +168,50 @@ TEST(edit_patch_legit_in_workspace_still_applies) {
   astools_test_rmtree(root);
 }
 
+TEST(proc_timeout_does_not_wait_for_orphan_pipe_holders) {
+  char root[256], ws[512], cfg_path[512], cfg[4096];
+  astools_open_params op;
+  astools_ctx *c = NULL;
+  astools_result r;
+  int64_t start, elapsed;
+
+  ASSERT_TRUE(astools_test_tmpdir(root));
+  snprintf(ws, sizeof ws, "%s/ws", root);
+  snprintf(cfg_path, sizeof cfg_path, "%s/config.xcdn", root);
+  ASSERT_TRUE(mkdir(ws, 0755) == 0);
+  snprintf(cfg, sizeof cfg,
+           "#astools_config {\n"
+           " registry: { paths: [ { path: \"%s\", trust: \"standard\" } ],"
+           " watch: \"off\", pinning: \"off\" },\n"
+           " workspace: { root: \"%s\" },\n"
+           " grants: { workspace_access: \"read-write\", tools: ["
+           " { tool: \"proc\", proc: true } ] },\n"
+           "}\n",
+           ASTOOLS_STD_PACKAGES, ws);
+  ASSERT_TRUE(write_file(cfg_path, cfg));
+  memset(&op, 0, sizeof op);
+  op.config_path = cfg_path;
+  ASSERT_OK(astools_open(&op, &c));
+
+  memset(&r, 0, sizeof r);
+  start = os_monotonic_ms();
+  ASSERT_OK(astools_invoke(
+      c, "proc", "run",
+      "{ argv: [\"/bin/sh\", \"-c\", \"sleep 4 &\"], timeout: r\"PT1S\" }",
+      3000, &r));
+  elapsed = os_monotonic_ms() - start;
+  ASSERT_EQ_INT(r.ok, 1);
+  ASSERT_TRUE(elapsed < 2500);
+  astools_result_free(&r);
+  astools_close(c);
+  astools_test_rmtree(root);
+}
+
 TEST_LIST = {
   TEST_ENTRY(edit_patch_symlink_escape_is_contained),
   TEST_ENTRY(fs_copy_destination_symlink_is_contained),
   TEST_ENTRY(edit_patch_legit_in_workspace_still_applies),
+  TEST_ENTRY(proc_timeout_does_not_wait_for_orphan_pipe_holders),
 };
 
 RUN_ALL_TESTS()

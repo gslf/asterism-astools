@@ -1,5 +1,5 @@
 /*
- * test_path.c — path.c: canonicalization + prefix containment (§6.4, §17).
+ * test_path.c — path.c: canonicalization + prefix containment.
  * Includes the classic symlink-escape detection case.
  */
 
@@ -129,7 +129,7 @@ TEST(canonical_missing_tail) {
 
 TEST(canonical_rejects_dotdot_in_missing_tail) {
   /* SAFETY: ".." in a non-existing tail would be re-appended textually and
-   * escape the canonical ancestor — must be rejected outright (§6.4). */
+   * escape the canonical ancestor — must be rejected outright. */
   ws_fixture f;
   char *out = NULL;
   astools_err e;

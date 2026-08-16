@@ -1,4 +1,4 @@
-// astools standard suite — edit (SPEC §8.5, A1): surgical text edits.
+// astools standard suite — edit: surgical text edits.
 // One busybox-style binary dispatched with `--tool edit`. Besides the
 // three release platforms, two extra dev entries (macos/x86_64,
 // linux/arm64) keep the tool available on every common dev machine.

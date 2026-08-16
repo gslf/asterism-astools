@@ -1,6 +1,6 @@
 /*
  * tool_fake.c — scripted oneshot protocol tool for the astools test-suite
- * (§17). One tiny xcdn-linked binary; the FIRST argv argument selects the
+ *. One tiny xcdn-linked binary; the FIRST argv argument selects the
  * behavior:
  *
  *   echo        parse the #tool_request, respond ok with result = the args
@@ -30,7 +30,9 @@
 #if defined(_WIN32)
 #include <windows.h>
 #else
+#include <sys/socket.h>
 #include <time.h>
+#include <unistd.h>
 #endif
 
 #include "xcdn.h"
@@ -218,6 +220,14 @@ static int do_request_behavior(const char *behavior) {
     if (ms < 0) ms = 0;
     sleep_ms(ms);
     respond_ok(id, "{}");
+  } else if (strcmp(behavior, "netprobe") == 0) {
+#if defined(_WIN32)
+    respond_ok(id, "{socket_ok: false}");
+#else
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd >= 0) close(fd);
+    respond_ok(id, fd >= 0 ? "{socket_ok: true}" : "{socket_ok: false}");
+#endif
   } else { /* echo */
     xcdn_node_t *args = detach_args(req);
     char *text = NULL;
@@ -237,7 +247,8 @@ int main(int argc, char **argv) {
   if (strcmp(behavior, "flood") == 0) return do_flood();
   if (strcmp(behavior, "echo") == 0 || strcmp(behavior, "sleep") == 0 ||
       strcmp(behavior, "crash") == 0 || strcmp(behavior, "badproto") == 0 ||
-      strcmp(behavior, "noresponse") == 0)
+      strcmp(behavior, "noresponse") == 0 ||
+      strcmp(behavior, "netprobe") == 0)
     return do_request_behavior(behavior);
 
   fprintf(stderr, "tool_fake: unknown behavior '%s'\n", behavior);

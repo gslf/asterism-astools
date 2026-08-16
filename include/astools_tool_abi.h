@@ -1,10 +1,10 @@
 /*
- * astools_tool_abi.h — C ABI for in-process tools of kind "library" (§5.4).
+ * astools_tool_abi.h — C ABI for in-process tools of kind "library".
  *
  * A library tool is loaded with dlopen/LoadLibrary from a "full"-trust
  * registry root, only when sandbox.allow_library is true. It runs with the
  * host's privileges and cannot be sandboxed; deadlines are advisory. The
- * wire types are identical to the executable protocol (§5.2), so a tool can
+ * wire types are identical to the executable protocol, so a tool can
  * be developed as an executable and promoted to a library without changing
  * its protocol code.
  *

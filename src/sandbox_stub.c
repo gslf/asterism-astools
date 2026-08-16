@@ -1,8 +1,8 @@
 /*
  * sandbox_stub.c — honest ASTOOLS_ERR_UNSUPPORTED sandbox backend for
- * platforms without one (§14: Windows deferred; §6 strict_fallback still
+ * platforms without one (Windows deferred; strict_fallback still
  * happens above this layer). Capability reporting is all zeros: nothing
- * is enforced here and nothing pretends to be (D5).
+ * is enforced here and nothing pretends to be.
  *
  * Added to the build only where sandbox_posix.c is not, but the file
  * itself compiles on every platform; the two are never linked together.

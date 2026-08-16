@@ -1,8 +1,8 @@
 /*
- * semver.c — strict SemVer 2.0.0 parse and precedence (§3.7).
+ * semver.c — strict SemVer 2.0.0 parse and precedence.
  *
  * Build metadata ("+..." suffix) is validated and then discarded: it never
- * participates in precedence and is not stored (§3.2).
+ * participates in precedence and is not stored.
  */
 
 #include "astools_internal.h"

@@ -1,5 +1,5 @@
 /*
- * astools_test.h — minimal test harness for Astools (spec §16: ~100 LOC, no
+ * astools_test.h — minimal test harness for Astools (~100 LOC, no
  * framework dependency).
  *
  * Usage:

@@ -1,7 +1,7 @@
 /*
- * invoke.c — the §5.1 invocation pipeline.
+ * invoke.c — the invocation pipeline.
  *
- * Engine failure and tool failure are never conflated (§16): the returned
+ * Engine failure and tool failure are never conflated: the returned
  * astools_err is the engine verdict; out->ok / out->error_* carry the
  * tool-level outcome. The exec layer (worker.c) fills reserved
  * "astools/..." codes into the result for engine-caused terminations so
@@ -126,7 +126,7 @@ done:
   return e;
 }
 
-/* ---- result validation (§5.1 step 7) ------------------------------------- */
+/* ---- result validation (step 7) ------------------------------------- */
 
 /* Returns ASTOOLS_OK when the successful result matches returns_type;
  * otherwise writes a message into err. */
@@ -154,12 +154,12 @@ static astools_err check_result(const astools_cmd *cmd,
   return e;
 }
 
-/* ---- the pipeline (§5.1) -------------------------------------------------- */
+/* ---- the pipeline -------------------------------------------------- */
 
 astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                                 const char *command, const char *args_xcdn,
                                 uint32_t deadline_ms,
-                                volatile int *cancel_flag,
+                                astools_task *cancel_task,
                                 astools_result *out) {
   astools_tool *t = NULL;
   const astools_cmd *cmd = NULL;
@@ -194,6 +194,8 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
   /* 1. resolve ref, find command. */
   e = astools_registry_resolve(c, ref, &t);
   if (e != ASTOOLS_OK) goto cleanup_early;
+  e = astools_registry_revalidate(c, t);
+  if (e != ASTOOLS_OK) goto done;
   cmd = astools_manifest_cmd(t->m, command);
   if (!cmd) {
     e = cmd_not_found(c, t, command);
@@ -290,18 +292,18 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                            "no-thread mode");
       else
         e = astools_exec_persistent(c, t, &setup, req, id, deadline_mono,
-                                    cancel_flag, out);
+                                    cancel_task, out);
 #endif
     } else {
       e = astools_exec_oneshot(c, &setup, req, id, deadline_mono,
                                c->cfg.max_output_bytes,
-                               c->cfg.stderr_max_bytes, cancel_flag, out,
+                               c->cfg.stderr_max_bytes, cancel_task, out,
                                &exit_code, &stderr_cap);
       out->exit_code = exit_code;
     }
   }
 
-  /* 6. result validation (§5.1 step 7). */
+  /* 6. result validation (step 7). */
   if (e == ASTOOLS_OK && out->ok && cmd->returns_type &&
       c->cfg.result_validation != ASTOOLS_RESVAL_OFF) {
     char rerr[512];
@@ -321,8 +323,8 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
 done:
   /* 7. counters, audit, log. Reached once the ref resolved to a tool `t`
    * (cmd/args may be absent on a post-resolve validation failure), so every
-   * attempted invocation of a real tool is counted and audited (§5.1 step
-   * 8, §16) — symmetric with the policy-denied path. */
+   * attempted invocation of a real tool is counted and audited —
+   * symmetric with the policy-denied path. */
   out->duration_ms = (uint64_t)(astools_mono(c) - t0);
 
   os_rwlock_wrlock(&c->lock);

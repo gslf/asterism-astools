@@ -9,26 +9,26 @@
  *   uuid.c          UUID v4 generation / validation
  *   sha256.c        SHA-256 (streaming + one-shot + file)
  *   log.c           leveled rotating file log + host callback + audit
- *   types.c         #type parsing, strict validation, defaults (§3.4)
- *   manifest.c      #astools_tool parsing, schema + lint (§3.2–§3.3)
- *   semver.c        SemVer 2.0.0 parse/compare (§3.7)
- *   registry.c      roots scan, table publish, resolution (§4)
- *   lockfile.c      astools.lock.xcdn load/check/approve (§4.4)
- *   config.c        defaults + config.xcdn (§12)
- *   path.c          canonicalization, prefix containment (§6.4)
- *   policy.c        grants intersection + pre-flight (§6.3)
- *   sandbox_posix.c env scrub, limits, seatbelt profile, jail (§6)
- *   proto.c         #tool_request/#tool_response build/parse (§5.2, App. B)
- *   invoke.c        the §5.1 pipeline
- *   worker.c        oneshot exec, async tasks, persistent table, poll (§9)
- *   catalog.c       budgeted catalog rendering (§7.1)
- *   gbnf.c          GBNF export (§7.3)
- *   callline.c      CALL/RESULT/ERROR lines (§7.2)
- *   jscm.c          JSON Schema + MCP description strings (§7.4)
+ *   types.c         #type parsing, strict validation, defaults
+ *   manifest.c      #astools_tool parsing, schema + lint
+ *   semver.c        SemVer 2.0.0 parse/compare
+ *   registry.c      roots scan, table publish, resolution
+ *   lockfile.c      astools.lock.xcdn load/check/approve
+ *   config.c        defaults + config.xcdn
+ *   path.c          canonicalization, prefix containment
+ *   policy.c        grants intersection + pre-flight
+ *   sandbox_posix.c env scrub, limits, seatbelt profile, jail
+ *   proto.c         #tool_request/#tool_response build/parse
+ *   invoke.c        the pipeline
+ *   worker.c        oneshot exec, async tasks, persistent table, poll
+ *   catalog.c       budgeted catalog rendering
+ *   gbnf.c          GBNF export
+ *   callline.c      CALL/RESULT/ERROR lines
+ *   jscm.c          JSON Schema + MCP description strings
  *   api.c           public API funnel, open/close wiring
  *   os_*.c          platform shim (os.h)
  *
- * Locking protocol (§9): c->lock (rwlock) guards the registry table,
+ * Locking protocol: c->lock (rwlock) guards the registry table,
  * enable flags, lock-state and stats. Invocations do NOT hold c->lock
  * while a tool runs — they pin the resolved astools_tool by refcount
  * (astools_tool_ref/unref). c->slot_mu guards slot admission. c->pp_mu
@@ -126,7 +126,7 @@ void astools_sha256_final(astools_sha256_ctx *ctx, uint8_t out[32]);
 void astools_sha256(const void *data, size_t len, uint8_t out[32]);
 astools_err astools_sha256_file(const char *path, uint8_t out[32]);
 
-/* ═══════════════════════ types.c (§3.4) ═══════════════════════ */
+/* ═══════════════════════ types.c ═══════════════════════ */
 
 typedef enum {
   AT_STRING = 0,
@@ -191,7 +191,7 @@ astools_type *astools_type_parse(const xcdn_node_t *node, char *err,
 void astools_type_free(astools_type *t);
 void astools_param_free_fields(astools_param *p); /* frees members, not p */
 
-/* Strict recursive check of value against t (§3.4: no coercion). Path
+/* Strict recursive check of value against t (no coercion). Path
  * params check as strings here; resolution happens in policy. On mismatch
  * returns ASTOOLS_ERR_INVALID and writes "param x: expected integer, got
  * string"-style text into err. ctxname is the parameter path for
@@ -206,7 +206,7 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
 astools_err astools_args_validate(const astools_cmd *cmd, xcdn_node_t *args,
                                   char *err, size_t err_cap);
 
-/* ═══════════════════════ manifest.c (§3.2–§3.3) ═══════════════════════ */
+/* ═══════════════════════ manifest.c ═══════════════════════ */
 
 #define ASTOOLS_KIND_EXECUTABLE 0
 #define ASTOOLS_KIND_LIBRARY 1
@@ -301,7 +301,7 @@ int astools_manifest_lint(const astools_manifest *m, astools_buf *out);
 /* Canonical re-serialization of a manifest (astools_tool_manifest API). */
 astools_err astools_manifest_render(const astools_manifest *m, char **out);
 
-/* ═══════════════════════ semver.c (§3.7) ═══════════════════════ */
+/* ═══════════════════════ semver.c ═══════════════════════ */
 
 typedef struct {
   int64_t major, minor, patch;
@@ -313,7 +313,7 @@ bool astools_semver_parse(const char *s, astools_semver *out);
 int  astools_semver_cmp(const astools_semver *a, const astools_semver *b);
 void astools_semver_free(astools_semver *v);
 
-/* ═══════════════════════ registry.c (§4) ═══════════════════════ */
+/* ═══════════════════════ registry.c ═══════════════════════ */
 
 #define ASTOOLS_TRUST_STANDARD 0
 #define ASTOOLS_TRUST_FULL 1
@@ -334,6 +334,7 @@ struct astools_tool {
   bool host_disabled;  /* astools_tool_enable(off) sticky across refresh */
   astools_lock_state lock_state;
   const astools_entry *entry; /* selected for current platform; borrowed */
+  uint8_t content_sha256[32]; /* manifest + local runtime entry bytes */
   astools_semver ver;
   int refcount; /* 1 owned by table; invocations add refs */
 };
@@ -347,7 +348,7 @@ void astools_tool_unref(astools_tool *t);
 /* Full rescan of all roots; publishes the new table under c->lock,
  * unrefs replaced descriptors, updates stats + last_refresh. Returns
  * ASTOOLS_OK even when individual packages were rejected (logged). Sets
- * *out_changed = 1 when the published table differs (§4.3 list_changed). */
+ * *out_changed = 1 when the published table differs (list_changed). */
 astools_err astools_registry_scan(astools_ctx *c, int *out_changed);
 
 /* Resolve "id" or "id@version" to a pinned descriptor (adds a ref; caller
@@ -357,15 +358,21 @@ astools_err astools_registry_scan(astools_ctx *c, int *out_changed);
 astools_err astools_registry_resolve(astools_ctx *c, const char *ref,
                                      astools_tool **out);
 
+/* Re-check current on-disk bytes immediately before execution when pinning
+ * is enforced.  This closes the interval between a file change and the next
+ * registry poll. */
+astools_err astools_registry_revalidate(astools_ctx *c,
+                                        const astools_tool *t);
+
 /* Current platform strings, compile-time detected. */
 const char *astools_plat_os(void);   /* "linux" | "macos" | "windows" */
 const char *astools_plat_arch(void); /* "x86_64" | "arm64" */
 
-/* Poll support: 1 when registry.watch=poll and poll_interval elapsed and
- * some root/package mtime changed since the last scan. */
+/* Poll support: 1 when registry.watch=poll and poll_interval elapsed.  The
+ * scan itself hashes relevant contents, avoiding timestamp granularity bugs. */
 int astools_registry_poll_due(astools_ctx *c);
 
-/* ═══════════════════════ lockfile.c (§4.4) ═══════════════════════ */
+/* ═══════════════════════ lockfile.c ═══════════════════════ */
 
 typedef struct {
   char *path;
@@ -405,7 +412,7 @@ astools_err astools_lockfile_approve(const char *path, const char *id,
                                      const astools_manifest *m,
                                      astools_time now);
 
-/* ═══════════════════════ config.c (§12) ═══════════════════════ */
+/* ═══════════════════════ config.c ═══════════════════════ */
 
 #define ASTOOLS_PIN_OFF 0
 #define ASTOOLS_PIN_WARN 1
@@ -429,7 +436,7 @@ typedef struct {
   char *version;
 } astools_pin;
 
-/* Per-tool host grant (§6.3). */
+/* Per-tool host grant. */
 typedef struct {
   char *tool;
   astools_fs_perm *fs;
@@ -492,9 +499,9 @@ astools_err astools_config_load(const char *path, bool explicit_path,
                                 astools_config *cfg, char **err_msg);
 void        astools_config_free(astools_config *cfg);
 
-/* ═══════════════════════ path.c (§6.4) ═══════════════════════ */
+/* ═══════════════════════ path.c ═══════════════════════ */
 
-/* Canonicalize per §6.4: join relative input to workspace, resolve
+/* Canonicalize: join relative input to workspace, resolve
  * symlinks/dot segments. When missing_ok (write + !must_exist), the
  * deepest existing ancestor is canonicalized and the remainder
  * re-appended (the remainder must not contain ".."). Returns malloc'd
@@ -505,7 +512,7 @@ astools_err astools_path_canonical(const char *workspace, const char *in,
 /* 1 if path lies under prefix (component-boundary aware; equal counts). */
 int astools_path_under(const char *path, const char *prefix);
 
-/* ═══════════════════════ policy.c (§6.3) ═══════════════════════ */
+/* ═══════════════════════ policy.c ═══════════════════════ */
 
 typedef struct {
   astools_fs_perm *fs; /* canonical absolute prefixes */
@@ -520,7 +527,7 @@ astools_err astools_policy_effective(astools_ctx *c, const astools_tool *t,
                                      astools_effective *out);
 void astools_effective_free(astools_effective *eff);
 
-/* Pre-flight (§5.1 step 3 + §6.4): canonicalize every path-typed argument
+/* Pre-flight (step 3 +): canonicalize every path-typed argument
  * (recursively, mutating args in place so tools receive canonical
  * absolute paths), check fs coverage, then net/proc/env requirements.
  * On denial returns ASTOOLS_ERR_DENIED with a malloc'd actionable message
@@ -531,12 +538,12 @@ astools_err astools_policy_preflight(astools_ctx *c, const astools_tool *t,
                                      const astools_effective *eff,
                                      char **deny_msg);
 
-/* ═══════════════════════ sandbox_posix.c (§6) ═══════════════════════ */
+/* ═══════════════════════ sandbox_posix.c ═══════════════════════ */
 
 typedef struct {
   int level;         /* effective level after fallback */
-  char **argv;       /* NULL-terminated exec vector (jail-wrapped when
-                        strict on macOS); owned */
+  char **argv;       /* NULL-terminated exec vector (jail-wrapped in strict);
+                        owned */
   char **envp;       /* NULL-terminated scrubbed environment; owned */
   char *scratch_dir; /* created private cwd; owned */
   int64_t limit_cpu_seconds, limit_mem_bytes, limit_nproc;
@@ -544,7 +551,7 @@ typedef struct {
 
 /* Build the sandbox for one invocation: effective level (tool root may
  * not raise above cfg), scrubbed env (granted vars + PATH/HOME/TMPDIR +
- * ASTOOLS_* control vars, §5.2), scratch dir creation, jail wrapping.
+ * ASTOOLS_* control vars), scratch dir creation, jail wrapping.
  * entry_argv is the resolved absolute argv of the tool. */
 astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
                                     const astools_effective *eff,
@@ -555,7 +562,7 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
 void astools_sandbox_cleanup(astools_ctx *c, astools_sandbox_setup *s,
                              bool keep_scratch);
 
-/* Honest per-feature enforcement report for this platform (§6.5). */
+/* Honest per-feature enforcement report for this platform. */
 astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out);
 
 /* Resolve entry argv[0] against the package dir (or PATH/absolute for
@@ -563,7 +570,7 @@ astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out);
 astools_err astools_entry_resolve_argv(const astools_tool *t, char ***out);
 void        astools_argv_free(char **argv);
 
-/* ═══════════════════════ proto.c (§5.2, App. B) ═══════════════════════ */
+/* ═══════════════════════ proto.c ═══════════════════════ */
 
 /* Serialize one xCDN node/value standalone (compact single line unless
  * pretty). malloc'd. */
@@ -576,7 +583,7 @@ astools_err astools_xcdn_parse_first(const char *text, size_t len,
                                      xcdn_document_t **out_doc,
                                      xcdn_node_t **out_node, char **err_msg);
 
-/* Build one #tool_request (App. B). args is the validated+canonical args
+/* Build one #tool_request. args is the validated+canonical args
  * object. deadline is an absolute unix time. */
 astools_err astools_proto_request(const astools_tool *t,
                                   const astools_cmd *cmd,
@@ -597,19 +604,19 @@ astools_err astools_proto_parse_response(const char *text, size_t len,
                                          char **out_id, astools_result *r,
                                          char **err_msg);
 
-/* Persistent-mode messages (§5.3). */
+/* Persistent-mode messages. */
 astools_err astools_proto_parse_hello(const char *text, size_t len,
                                       const astools_tool *t, char **err_msg);
 char       *astools_proto_cancel(const char *invocation_id);
 
-/* ═══════════════════════ invoke.c (§5.1) ═══════════════════════ */
+/* ═══════════════════════ invoke.c ═══════════════════════ */
 
-/* cancel_flag (may be NULL): polled by the exec loops; a nonzero value
- * kills the child and yields ASTOOLS_ERR_CANCELLED. */
+/* cancel_task (may be NULL): its cancelled field is read under the task
+ * mutex, so cancellation is race-free in strict C99. */
 astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                                 const char *command, const char *args_xcdn,
                                 uint32_t deadline_ms,
-                                volatile int *cancel_flag,
+                                astools_task *cancel_task,
                                 astools_result *out);
 
 /* Validation-only path (public astools_validate_args). */
@@ -617,7 +624,7 @@ astools_err astools_validate_impl(astools_ctx *c, const char *ref,
                                   const char *command,
                                   const char *args_xcdn);
 
-/* ═══════════════════════ worker.c (§9) ═══════════════════════ */
+/* ═══════════════════════ worker.c ═══════════════════════ */
 
 /* One oneshot execution: spawn under setup, write request, pump stdio
  * with caps (max_output_bytes / stderr cap), enforce deadline_mono (an
@@ -631,7 +638,7 @@ astools_err astools_exec_oneshot(astools_ctx *c,
                                  int64_t deadline_mono,
                                  int64_t max_output_bytes,
                                  int64_t stderr_max_bytes,
-                                 volatile int *cancel_flag,
+                                 astools_task *cancel_task,
                                  astools_result *r, int *exit_code,
                                  char **stderr_cap);
 
@@ -643,10 +650,10 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t,
                                     const char *request_text,
                                     const char *invocation_id,
                                     int64_t deadline_mono,
-                                    volatile int *cancel_flag,
+                                    astools_task *cancel_task,
                                     astools_result *r);
 
-/* Library dispatch (kind "library", §5.4): dlopen once per tool, call
+/* Library dispatch (kind "library"): dlopen once per tool, call
  * vtable->invoke on the calling thread. */
 astools_err astools_exec_library(astools_ctx *c, astools_tool *t,
                                  const char *request_text,
@@ -679,7 +686,7 @@ struct astools_task {
   bool thread_valid;
 };
 
-/* ═══════════════════════ catalog.c / gbnf.c / callline.c (§7) ═══════════ */
+/* ═══════════════════════ catalog.c / gbnf.c / callline.c ═══════════ */
 
 astools_err astools_catalog_render(astools_ctx *c, astools_catalog_level lvl,
                                    size_t char_budget, char **out);
@@ -690,7 +697,7 @@ astools_err astools_callline_parse(const char *model_output, char **out_ref,
 astools_err astools_callline_format(const char *ref, const char *command,
                                     const astools_result *r, char **out_line);
 
-/* ═══════════════════════ jscm.c (§7.4) ═══════════════════════ */
+/* ═══════════════════════ jscm.c ═══════════════════════ */
 
 /* JSON Schema object (compact JSON text) for a command's parameters. */
 astools_err astools_jschema_input(const astools_cmd *cmd, char **out_json);
@@ -699,7 +706,7 @@ astools_err astools_jschema_input(const astools_cmd *cmd, char **out_json);
 astools_err astools_mcp_description(const astools_tool *t,
                                     const astools_cmd *cmd, char **out_text);
 
-/* ═══════════════════════ log.c (§16) ═══════════════════════ */
+/* ═══════════════════════ log.c ═══════════════════════ */
 
 astools_err astools_log_open(astools_ctx *c);
 void        astools_log_close(astools_ctx *c);
@@ -708,7 +715,7 @@ void        astools_log_close(astools_ctx *c);
 void astools_log(astools_ctx *c, int level, const char *subsys,
                  const char *fmt, ...);
 
-/* Audit trail (§16): appends one #invocation record to audit.xcdn next to
+/* Audit trail: appends one #invocation record to audit.xcdn next to
  * the config (config_dir). args_sha256 of the canonical args text. */
 void astools_audit_append(astools_ctx *c, const char *tool,
                           const char *version, const char *command, bool ok,
@@ -734,7 +741,7 @@ struct astools_ctx {
   astools_lockfile lockfile;
   os_rwlock lock;
   int64_t last_scan_mono;
-  uint64_t scan_fingerprint; /* FNV over (path, mtime) of roots+packages */
+  uint64_t scan_fingerprint; /* compact digest of published tool contents */
   astools_time last_refresh_unix;
   bool tools_changed_flag; /* set by scan for MCP list_changed; consumer
                               clears */

@@ -1,5 +1,5 @@
 /*
- * path.c — path canonicalization and prefix containment (§6.4).
+ * path.c — path canonicalization and prefix containment.
  *
  * SAFETY CRITICAL. Canonical paths produced here are the sole basis of the
  * filesystem grant checks in policy.c: every symlink and dot segment must be
