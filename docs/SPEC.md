@@ -83,6 +83,8 @@ stdout cap invocation.max_output_bytes (default 1 MiB); exceeding ⇒ ERR_TOOL "
 
 Levels: `none` (debug) · `basic` (default; portable: process isolation, env scrub, scratch cwd, wall deadline, output caps, CPU/mem/nproc rlimits or Job Object; fs/net policy by pre-flight only) · `strict` (basic + kernel enforcement: Linux Landlock+seccomp+no_new_privs+empty netns; macOS Seatbelt profile via astools-jail; Windows restricted token; missing features ⇒ sandbox.strict_fallback "degrade" (default, warn) | "reject" (ERR_UNSUPPORTED)).
 
+RLIMIT_NPROC is charged by the kernel per real UID across the whole system, not per process tree, so the cap is **relative**: current task count of the account + 256 headroom, recomputed per invocation. An absolute cap denies `fork()` to every tool on any host whose user already runs more tasks than the cap — invisible on an idle CI runner, fatal on a desktop session. Where the task count cannot be read no cap is applied and `astools_get_sandbox_caps` reports `process_cap` 0 rather than claiming one. Both soft and hard limits are lowered, so a tool cannot lift the cap back up; applying it is best effort and never fails an otherwise valid invocation.
+
 ### 6.3 Grants
 Effective = manifest request ∩ host grants. grants.workspace_access (default read-write) auto-grants the workspace subtree; grants.tools adds per-tool fs prefixes / net / proc / env. Missing grant ⇒ preflight ERR_DENIED with a message naming the missing grant. Effective set is serialized into #tool_request (informative; enforcement never relies on it).
 

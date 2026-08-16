@@ -460,7 +460,13 @@ TEST(strict_linux_executes_when_available) {
     inv_drop(&f); /* old kernel/platform: capability report is the contract */
     return;
   }
-  ASSERT_TRUE(caps.net_deny && caps.syscall_filter && caps.privilege_drop);
+  ASSERT_TRUE(caps.net_deny && caps.privilege_drop);
+#if defined(__linux__)
+  /* seccomp. The macOS Seatbelt profile confines the filesystem and denies
+   * the network, but has no syscall-filter equivalent, so the capability
+   * report leaves this bit zero there (sandbox_posix.c). */
+  ASSERT_TRUE(caps.syscall_filter);
+#endif
   if (astools_invoke(f.c, "fk", "run", "{ msg: \"strict\" }", 2000, &r) !=
       ASTOOLS_OK) {
     ASTOOLS_FAILF("strict invoke failed: %s", astools_last_error(f.c));

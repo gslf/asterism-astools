@@ -19,6 +19,7 @@ set(ASTOOLS_TESTS
   test_regex
   test_jscm
   test_catalog
+  test_sandbox
   test_invoke
   test_escape
 )

@@ -689,7 +689,9 @@ static astools_err parse_sec_invocation(const xcdn_value_t *v,
                                      {"enforce", ASTOOLS_RESVAL_ENFORCE}};
   size_t i, n;
   astools_err e;
-  int64_t iv;
+  /* get_int always writes on success, but gcc 13 loses that correlation
+   * across inlining and reports -Wmaybe-uninitialized under -Werror. */
+  int64_t iv = 0;
 
   if (!v || v->type != XCDN_VAL_OBJECT)
     return cfg_fail(err_msg, "config: invocation: expected object");
@@ -733,7 +735,7 @@ static astools_err parse_sec_catalog(const xcdn_value_t *v,
                                       {"full", ASTOOLS_CATALOG_FULL}};
   size_t i, n;
   astools_err e;
-  int64_t iv;
+  int64_t iv = 0;
 
   if (!v || v->type != XCDN_VAL_OBJECT)
     return cfg_fail(err_msg, "config: catalog: expected object");
@@ -797,7 +799,7 @@ static astools_err parse_sec_logging(const xcdn_value_t *v,
                                       {"debug", ASTOOLS_LOG_DEBUG}};
   size_t i, n;
   astools_err e;
-  int64_t iv;
+  int64_t iv = 0;
 
   if (!v || v->type != XCDN_VAL_OBJECT)
     return cfg_fail(err_msg, "config: logging: expected object");

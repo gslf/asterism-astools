@@ -565,6 +565,17 @@ void astools_sandbox_cleanup(astools_ctx *c, astools_sandbox_setup *s,
 /* Honest per-feature enforcement report for this platform. */
 astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out);
 
+/* RLIMIT_NPROC value for a spawned tool: the account's current task count
+ * plus a fixed headroom, because the kernel charges the limit per real UID
+ * across the whole system rather than per process tree. A fixed cap would
+ * deny fork() outright to every tool on a host that already runs more tasks
+ * than the cap. ASTOOLS_ERR_UNSUPPORTED where usage cannot be read, meaning
+ * no cap should be applied. */
+astools_err astools_sandbox_nproc_cap(int64_t *out);
+
+/* Tasks a tool may create beyond what the account already runs. */
+#define ASTOOLS_NPROC_HEADROOM 256
+
 /* Resolve entry argv[0] against the package dir (or PATH/absolute for
  * full-trust roots) into a full exec vector; malloc'd NULL-terminated. */
 astools_err astools_entry_resolve_argv(const astools_tool *t, char ***out);

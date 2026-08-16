@@ -72,6 +72,7 @@
 #define os_dylib_open         astls_x_dylib_open
 #define os_dylib_close        astls_x_dylib_close
 #define os_proc_spawn         astls_x_proc_spawn
+#define os_proc_user_tasks    astls_x_proc_user_tasks
 #define os_proc_wait          astls_x_proc_wait
 #define os_proc_poll          astls_x_proc_poll
 #define os_proc_kill          astls_x_proc_kill
@@ -246,6 +247,13 @@ typedef struct {
  * (POSIX) so the whole tree can be killed. Pipes are non-blocking on the
  * parent side. */
 astools_err os_proc_spawn(const os_spawn_opts *o, os_proc *p);
+
+/* Tasks (threads) currently charged to the caller's real UID — exactly the
+ * quantity the kernel tests RLIMIT_NPROC against at fork(). The limit is
+ * per-UID and system-wide, not per process tree, so an absolute cap is only
+ * meaningful relative to what the account already uses.
+ * ASTOOLS_ERR_UNSUPPORTED where the platform cannot report it. */
+astools_err os_proc_user_tasks(int64_t *out);
 
 /* Multiplexed wait for pipe readiness. want_write: include fd_in
  * writability. timeout_ms < 0 waits forever. *ready is a bitmask; 0 on

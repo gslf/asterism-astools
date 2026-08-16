@@ -73,6 +73,12 @@ astools_err os_proc_spawn(const os_spawn_opts *o, os_proc *p) {
   return ASTOOLS_ERR_UNSUPPORTED;
 }
 
+astools_err os_proc_user_tasks(int64_t *out) {
+  /* Windows caps processes with a Job Object, not a per-uid rlimit. */
+  if (out) *out = 0;
+  return ASTOOLS_ERR_UNSUPPORTED;
+}
+
 astools_err os_proc_poll(os_proc *p, int want_write, int64_t timeout_ms,
                          unsigned *ready) {
   (void)p;

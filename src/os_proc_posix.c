@@ -404,11 +404,79 @@ static int child_limits(const os_spawn_opts *o) {
     (void)child_one_limit(RLIMIT_AS, o->limit_mem_bytes);
 #endif
 #ifdef RLIMIT_NPROC
-  if (o->limit_nproc > 0 &&
-      child_one_limit(RLIMIT_NPROC, o->limit_nproc) != 0)
-    return -1;
+  /* Best effort, like RLIMIT_AS. The cap is containment hardening, not a
+   * correctness precondition, so a kernel that refuses it must not turn a
+   * valid invocation into a spawn failure. */
+  if (o->limit_nproc > 0)
+    (void)child_one_limit(RLIMIT_NPROC, o->limit_nproc);
 #endif
   return 0;
+}
+
+#if defined(__linux__)
+/*
+ * Threads: field of /proc/<pid>/status. 0 when unreadable — a process may
+ * exit mid-scan, which is normal and simply drops it from the total.
+ */
+static int64_t proc_task_count(const char *pid) {
+  char path[48], buf[4096];
+  int fd;
+  ssize_t off = 0;
+  const char *p;
+  (void)snprintf(path, sizeof path, "/proc/%s/status", pid);
+  fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return 0;
+  while (off < (ssize_t)sizeof buf - 1) {
+    ssize_t n = read(fd, buf + off, (size_t)((ssize_t)sizeof buf - 1 - off));
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      break;
+    }
+    if (n == 0) break;
+    off += n;
+  }
+  close(fd);
+  buf[off < 0 ? 0 : off] = '\0';
+  p = strstr(buf, "\nThreads:");
+  if (!p) return 0;
+  return (int64_t)strtol(p + 9, NULL, 10);
+}
+#endif
+
+astools_err os_proc_user_tasks(int64_t *out) {
+#if defined(__linux__)
+  DIR *d;
+  struct dirent *de;
+  uid_t me;
+  int64_t total = 0;
+
+  if (!out) return ASTOOLS_ERR_INVALID;
+  me = getuid(); /* RLIMIT_NPROC is charged to the real UID */
+  d = opendir("/proc");
+  if (!d) return ASTOOLS_ERR_UNSUPPORTED;
+  while ((de = readdir(d)) != NULL) {
+    char pid[16];
+    char path[32];
+    struct stat st;
+    size_t i;
+    /* numeric entries only; the bounded copy also keeps the two snprintf
+     * destinations provably large enough for -Wformat-truncation */
+    for (i = 0; de->d_name[i] >= '0' && de->d_name[i] <= '9'; i++) {}
+    if (i == 0 || de->d_name[i] != '\0' || i >= sizeof pid) continue;
+    memcpy(pid, de->d_name, i + 1);
+    (void)snprintf(path, sizeof path, "/proc/%s", pid);
+    if (stat(path, &st) != 0 || st.st_uid != me) continue;
+    total += proc_task_count(pid);
+  }
+  closedir(d);
+  *out = total;
+  return ASTOOLS_OK;
+#else
+  /* No /proc: macOS deliberately leaves RLIMIT_NPROC alone (it is per-uid
+   * there too, and would throttle the whole login session). */
+  if (out) *out = 0;
+  return ASTOOLS_ERR_UNSUPPORTED;
+#endif
 }
 
 astools_err os_proc_spawn(const os_spawn_opts *o, os_proc *p) {

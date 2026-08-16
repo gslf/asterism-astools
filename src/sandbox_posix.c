@@ -252,6 +252,24 @@ static void sb_quote(astools_buf *b, astools_err *e, const char *s) {
 }
 
 /*
+ * Same, but for a path filter: Seatbelt matches the path the kernel
+ * resolved, and on macOS /tmp, /var and $TMPDIR are symlinks into
+ * /private, so a raw path would match nothing. Emit the canonical form
+ * whenever it can be obtained; a path that cannot be resolved (not yet
+ * created) falls back to the literal text.
+ */
+static void sb_quote_path(astools_buf *b, astools_err *e, const char *s) {
+  char *canon = NULL;
+  if (*e != ASTOOLS_OK) return;
+  if (os_realpath(s, &canon) == ASTOOLS_OK && canon) {
+    sb_quote(b, e, canon);
+    free(canon);
+    return;
+  }
+  sb_quote(b, e, s);
+}
+
+/*
  * Seatbelt profile generator. Shape (deny-by-default):
  *
  *   (version 1)
@@ -261,15 +279,22 @@ static void sb_quote(astools_buf *b, astools_err *e, const char *s) {
  *   (allow signal (target same-sandbox))
  *   (allow file-read* <runtime prefixes: /usr/lib /System /usr/share
  *     /private/var/db/dyld /Library/Preferences/Logging /dev/null
- *     /dev/urandom /dev/random /dev/fd> (subpath <pkg_dir>))
+ *     /dev/urandom /dev/random /dev/fd> (subpath <pkg_dir>)
+ *     (literal <tool_bin>))
  *   (allow file-write-data (literal "/dev/null"))
  *   (allow file-read* (subpath <scratch>)) (allow file-write* (subpath ..))
  *   per effective fs grant: READ  => (allow file-read*  (subpath P))
  *                           WRITE => (allow file-write* (subpath P))
  *   net grant => (allow network*); otherwise deny-default blocks it.
+ *
+ * tool_bin is the resolved entry binary. Under root trust an entry may name
+ * an absolute path outside its own package, and dyld has to map that file to
+ * start it, so it gets its own read rule — the Linux branch grants the same
+ * path through Landlock.
  */
 static astools_err sandbox_sbpl_profile(const char *pkg_dir,
                                         const char *scratch,
+                                        const char *tool_bin,
                                         const astools_effective *eff,
                                         char **out) {
   astools_buf b;
@@ -306,26 +331,33 @@ static astools_err sandbox_sbpl_profile(const char *pkg_dir,
          "  (literal \"/dev/random\")\n"
          "  (subpath \"/dev/fd\")\n"
          "  (subpath ");
-  sb_quote(&b, &e, pkg_dir);
+  sb_quote_path(&b, &e, pkg_dir);
+  sb_add(&b, &e, ")");
+  /* Entry binary outside the package (root trust): dyld must map it. */
+  if (tool_bin && tool_bin[0] == '/') {
+    sb_add(&b, &e, "\n  (literal ");
+    sb_quote_path(&b, &e, tool_bin);
+    sb_add(&b, &e, ")");
+  }
   sb_add(&b, &e,
-         "))\n"
+         ")\n"
          "(allow file-write-data (literal \"/dev/null\"))\n"
          "(allow file-read* (subpath ");
-  sb_quote(&b, &e, scratch);
+  sb_quote_path(&b, &e, scratch);
   sb_add(&b, &e, "))\n(allow file-write* (subpath ");
-  sb_quote(&b, &e, scratch);
+  sb_quote_path(&b, &e, scratch);
   sb_add(&b, &e, "))\n");
   for (i = 0; eff && i < eff->fs_len; i++) {
     const astools_fs_perm *p = &eff->fs[i];
     if (!p->path || p->path[0] == '\0') continue;
     if (p->access & ASTOOLS_ACCESS_READ) {
       sb_add(&b, &e, "(allow file-read* (subpath ");
-      sb_quote(&b, &e, p->path);
+      sb_quote_path(&b, &e, p->path);
       sb_add(&b, &e, "))\n");
     }
     if (p->access & ASTOOLS_ACCESS_WRITE) {
       sb_add(&b, &e, "(allow file-write* (subpath ");
-      sb_quote(&b, &e, p->path);
+      sb_quote_path(&b, &e, p->path);
       sb_add(&b, &e, "))\n");
     }
   }
@@ -519,7 +551,8 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
 #if defined(__APPLE__)
   if (level == ASTOOLS_SB_STRICT) {
     char *profile = NULL, *kv;
-    e = sandbox_sbpl_profile(t->pkg_dir, scratch, eff, &profile);
+    e = sandbox_sbpl_profile(t->pkg_dir, scratch, entry_argv[0], eff,
+                             &profile);
     if (e != ASTOOLS_OK) {
       e = astools_seterr(c, e, "sandbox: cannot generate Seatbelt profile");
       goto fail;
@@ -563,10 +596,14 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
   out->limit_cpu_seconds = 0;
 #if defined(__linux__)
   if (level != ASTOOLS_SB_NONE) {
+    int64_t nproc = 0;
 #if !defined(ASTOOLS_SANITIZERS_ACTIVE)
     out->limit_mem_bytes = (int64_t)1 << 30;
 #endif
-    out->limit_nproc = 256;
+    /* Unreadable usage leaves limit_nproc at 0 (no cap): a guessed absolute
+     * value would deny fork() to every tool on a busy account. */
+    if (astools_sandbox_nproc_cap(&nproc) == ASTOOLS_OK)
+      out->limit_nproc = nproc;
   }
 #endif
 
@@ -601,6 +638,21 @@ void astools_sandbox_cleanup(astools_ctx *c, astools_sandbox_setup *s,
   memset(s, 0, sizeof *s);
 }
 
+/* ---- process cap ---------------------------------------------- */
+
+astools_err astools_sandbox_nproc_cap(int64_t *out) {
+  int64_t used = 0;
+  astools_err e;
+  if (!out) return ASTOOLS_ERR_INVALID;
+  *out = 0;
+  e = os_proc_user_tasks(&used);
+  if (e != ASTOOLS_OK) return e;
+  if (used < 0) used = 0;
+  if (used > INT64_MAX - ASTOOLS_NPROC_HEADROOM) return ASTOOLS_ERR_UNSUPPORTED;
+  *out = used + ASTOOLS_NPROC_HEADROOM;
+  return ASTOOLS_OK;
+}
+
 /* ---- honest capability report -------------------------------- */
 
 astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out) {
@@ -613,7 +665,13 @@ astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out) {
 #if !defined(ASTOOLS_SANITIZERS_ACTIVE)
   out->memory_cap = 1;
 #endif
-  out->process_cap = 1;
+  /* Only claimed when the account's task count is actually readable —
+   * without it no RLIMIT_NPROC is applied, so claiming the cap would lie. */
+  {
+    int64_t nproc_cap = 0;
+    if (astools_sandbox_nproc_cap(&nproc_cap) == ASTOOLS_OK)
+      out->process_cap = 1;
+  }
 #endif
 #if defined(__APPLE__)
   /* strict on macOS: Seatbelt via astools-jail when discoverable — kernel
