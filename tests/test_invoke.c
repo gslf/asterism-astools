@@ -480,7 +480,12 @@ TEST(strict_linux_executes_when_available) {
   ASSERT_OK(astools_invoke(f.c, "netp", "run", "{}", 2000, &r));
   ASSERT_EQ_INT(r.ok, 1);
   ASSERT_TRUE(result_bool(r.result_xcdn, "socket_ok", &socket_ok));
-  ASSERT_EQ_INT(socket_ok, 0);
+  /* The probe only calls socket(2). That is refused by the seccomp filter,
+   * so what it really observes is syscall_filter, not net_deny: the macOS
+   * Seatbelt profile denies network *operations* (bind/connect) and lets
+   * the socket itself be created. Tie the expectation to the capability
+   * that produces it rather than to the platform. */
+  if (caps.syscall_filter) ASSERT_EQ_INT(socket_ok, 0);
   astools_result_free(&r);
   inv_drop(&f);
 }
