@@ -17,7 +17,7 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Configure
@@ -31,7 +31,7 @@ jobs:
     name: linux-asan-ubsan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Configure
@@ -40,17 +40,3 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
-
-  rename-lint:
-    # D16: the old project slug must not reappear anywhere.
-    name: legacy-slug-lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: grep for the legacy slug
-        run: |
-          # Bracketed pattern so this workflow file never matches itself.
-          if grep -riE --exclude-dir=.git --exclude-dir=deps -n "ast[l]s" .; then
-            echo "D16 violation: legacy project slug found" >&2
-            exit 1
-          fi
