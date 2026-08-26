@@ -40,20 +40,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-
-int astd_tool_edit(astd_req *r) {
-  astd_fail(r, "std/unsupported", "edit is not supported on Windows yet");
-  return 0;
-}
-
-#else /* POSIX */
-
 #include <errno.h>
+#ifdef _WIN32
+#include "compat_win32.h" /* must come after every system include */
+#else
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 /* ---- small growable buffer ---------------------------------------------- */
 
@@ -1294,5 +1289,3 @@ int astd_tool_edit(astd_req *r) {
     astd_fail(r, "astools/protocol", "unknown edit command '%s'", r->command);
   return 0;
 }
-
-#endif /* POSIX */

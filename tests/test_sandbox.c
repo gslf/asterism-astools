@@ -44,6 +44,9 @@ TEST(process_cap_claim_matches_reality) {
   can_cap = (astools_sandbox_nproc_cap(&cap) == ASTOOLS_OK);
 #if defined(__linux__)
   ASSERT_EQ_INT(caps.process_cap, can_cap);
+#elif defined(_WIN32)
+  ASSERT_EQ_INT(caps.process_cap, 1);
+  ASSERT_EQ_INT(can_cap, 0); /* Job cap has no per-user-count helper. */
 #else
   ASSERT_EQ_INT(caps.process_cap, 0);
   (void)can_cap;

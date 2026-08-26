@@ -82,6 +82,12 @@ astools_err astools_tool_manifest(astools_ctx *c, const char *ref,
 
 astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on);
 
+/* Registry state of the resolved tool ("fs" or "fs@1.2.0"); a bare id
+ * reads as enabled/available when any of its versions is. Either out
+ * pointer may be NULL. ASTOOLS_ERR_NOT_FOUND for an unknown ref. */
+astools_err astools_tool_state(astools_ctx *c, const char *ref,
+                               int *out_enabled, int *out_available);
+
 /* Recompute and record lockfile hashes for the resolved tool. */
 astools_err astools_tool_approve(astools_ctx *c, const char *ref);
 
@@ -171,6 +177,14 @@ typedef struct {
 } astools_stats;
 
 astools_err astools_get_stats(astools_ctx *c, astools_stats *out);
+
+typedef struct {
+  int workspace_bound;
+  int workspace_access; /* ASTOOLS_ACCESS_* */
+  int sandbox_level;    /* 0 off, 1 basic, 2 strict */
+  size_t tools_enabled;
+} astools_readiness;
+astools_err astools_get_readiness(astools_ctx *c, astools_readiness *out);
 
 enum {
   ASTOOLS_LOG_ERROR = 0,

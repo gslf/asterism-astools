@@ -159,6 +159,12 @@ typedef struct {
   int initialized; /* notifications/initialized received */
 } mcp_server;
 
+#define MCP_LEGACY_VERSION "2025-06-18"
+#define MCP_MODERN_VERSION "2026-07-28"
+/* stdio dispatch is strictly sequential, so response decoration can follow
+ * the request currently being handled without per-request heap state. */
+static int mcp_modern_response;
+
 /* ═══════════════════ stdin line reader ═══════════════════ */
 
 /* Hard cap on one JSON-RPC line. A single unterminated line must not drive
@@ -232,8 +238,31 @@ static jx_value *envelope(const jx_value *id) {
   return m;
 }
 
+static int decorate_modern_result(jx_value *result) {
+  jx_value *meta, *info;
+  int bad = 0;
+  if (!result || jx_typeof(result) != JX_OBJECT) return -1;
+  meta = jx_object();
+  info = jx_object();
+  if (!meta || !info) {
+    jx_free(meta);
+    jx_free(info);
+    return -1;
+  }
+  bad |= jx_object_set(info, "name", jx_string("astools-mcp"));
+  bad |= jx_object_set(info, "version", jx_string(ASTOOLS_VERSION));
+  bad |= jx_object_set(meta, "io.modelcontextprotocol/serverInfo", info);
+  bad |= jx_object_set(result, "resultType", jx_string("complete"));
+  bad |= jx_object_set(result, "_meta", meta);
+  return bad ? -1 : 0;
+}
+
 /* Consumes result. */
 static void reply_result(const jx_value *id, jx_value *result) {
+  if (mcp_modern_response && decorate_modern_result(result) != 0) {
+    jx_free(result);
+    return;
+  }
   jx_value *m = envelope(id);
   if (!m) {
     jx_free(result);
@@ -518,12 +547,22 @@ static void reply_call_text(const jx_value *id, const char *text,
 /* ═══════════════════ method: initialize / ping ═══════════════════ */
 
 static void handle_initialize(const jx_value *id, const jx_value *params) {
+  const jx_value *protocol = NULL;
   const char *ver = NULL;
   jx_value *result, *caps, *tools, *info;
   int bad = 0;
   if (!id) return;
-  if (params) ver = jx_string_value(jx_object_get(params, "protocolVersion"));
-  if (!ver) ver = "2025-06-18";
+  if (params) protocol = jx_object_get(params, "protocolVersion");
+  if (protocol && jx_typeof(protocol) != JX_STRING) {
+    reply_error(id, -32022, "unsupported MCP protocol version", NULL);
+    return;
+  }
+  if (protocol) ver = jx_string_value(protocol);
+  if (!ver) ver = MCP_LEGACY_VERSION;
+  if (strcmp(ver, MCP_LEGACY_VERSION) != 0) {
+    reply_error(id, -32022, "unsupported MCP protocol version", NULL);
+    return;
+  }
   result = jx_object();
   caps = jx_object();
   tools = jx_object();
@@ -536,9 +575,8 @@ static void handle_initialize(const jx_value *id, const jx_value *params) {
     reply_error(id, -32603, "out of memory", NULL);
     return;
   }
-  /* Echo whatever version the client requested (string form). */
   bad |= jx_object_set(result, "protocolVersion",
-                       jx_string_or(ver, "2025-06-18"));
+                       jx_string_or(ver, MCP_LEGACY_VERSION));
   bad |= jx_object_set(tools, "listChanged", jx_bool(1));
   bad |= jx_object_set(caps, "tools", tools);
   bad |= jx_object_set(result, "capabilities", caps);
@@ -551,6 +589,27 @@ static void handle_initialize(const jx_value *id, const jx_value *params) {
     return;
   }
   reply_result(id, result);
+}
+
+static jx_value *discover_result(void) {
+  jx_value *result = jx_object();
+  jx_value *versions = jx_array();
+  jx_value *caps = jx_object();
+  int bad = !result || !versions || !caps;
+  bad |= jx_array_push(versions, jx_string(MCP_MODERN_VERSION));
+  bad |= jx_array_push(versions, jx_string(MCP_LEGACY_VERSION));
+  bad |= jx_object_set(caps, "tools", jx_object());
+  bad |= jx_object_set(result, "supportedVersions", versions);
+  bad |= jx_object_set(result, "capabilities", caps);
+  bad |= jx_object_set(result, "instructions",
+                       jx_string("Sandboxed local tool registry."));
+  bad |= jx_object_set(result, "ttlMs", jx_int(3600000));
+  bad |= jx_object_set(result, "cacheScope", jx_string("private"));
+  if (bad) {
+    jx_free(result);
+    return NULL;
+  }
+  return result;
 }
 
 /* ═══════════════════ method: tools/list ═══════════════════ */
@@ -809,6 +868,7 @@ static void handle_message(mcp_server *s, const char *line, size_t len) {
   jx_value *msg = NULL;
   const jx_value *id;
   const jx_value *params;
+  const jx_value *protocolv = NULL;
   const char *method;
 
   if (jx_parse(line, len, &msg) != 0) {
@@ -829,8 +889,36 @@ static void handle_message(mcp_server *s, const char *line, size_t len) {
     return;
   }
 
+  {
+    const jx_value *meta = params && jx_typeof(params) == JX_OBJECT
+                               ? jx_object_get(params, "_meta")
+                               : NULL;
+    protocolv = meta && jx_typeof(meta) == JX_OBJECT
+                    ? jx_object_get(meta,
+                        "io.modelcontextprotocol/protocolVersion")
+                    : NULL;
+    mcp_modern_response = protocolv && jx_typeof(protocolv) == JX_STRING &&
+                          strcmp(jx_string_value(protocolv),
+                                 MCP_MODERN_VERSION) == 0;
+  }
+  if (protocolv && !mcp_modern_response &&
+      strcmp(method, "server/discover") != 0) {
+    if (id) reply_error(id, -32022, "unsupported MCP protocol version", NULL);
+    jx_free(msg);
+    return;
+  }
+
   if (strcmp(method, "initialize") == 0) {
+    mcp_modern_response = 0;
     handle_initialize(id, params);
+  } else if (strcmp(method, "server/discover") == 0) {
+    if (id) {
+      jx_value *r;
+      mcp_modern_response = 1;
+      r = discover_result();
+      if (r) reply_result(id, r);
+      else reply_error(id, -32603, "out of memory", NULL);
+    }
   } else if (strcmp(method, "notifications/initialized") == 0) {
     s->initialized = 1;
   } else if (strcmp(method, "notifications/cancelled") == 0) {

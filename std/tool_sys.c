@@ -10,27 +10,25 @@
 #endif
 
 #include "sdk.h"
-#ifdef _WIN32
-
-int astd_tool_sys(astd_req *r) {
-  astd_fail(r, "std/unsupported", "sys is not implemented on this platform");
-  return 0;
-}
-
-#else /* POSIX */
-
 #include <string.h>
-#include <unistd.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <unistd.h>
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #elif defined(__linux__)
 #include <sys/sysinfo.h>
 #endif
+#endif
 
 static const char *sys_os(void) {
-#if defined(__APPLE__)
+#if defined(_WIN32)
+  return "windows";
+#elif defined(__APPLE__)
   return "macos";
 #elif defined(__linux__)
   return "linux";
@@ -56,7 +54,13 @@ static const char *sys_arch(void) {
 }
 
 static int64_t sys_memory_mb(void) {
-#if defined(__APPLE__)
+#if defined(_WIN32)
+  MEMORYSTATUSEX ms;
+  ms.dwLength = sizeof ms;
+  if (GlobalMemoryStatusEx(&ms))
+    return (int64_t)(ms.ullTotalPhys / (1024u * 1024u));
+  return 0;
+#elif defined(__APPLE__)
   uint64_t mem = 0;
   size_t len = sizeof mem;
   if (sysctlbyname("hw.memsize", &mem, &len, NULL, 0) == 0)
@@ -74,11 +78,31 @@ static int64_t sys_memory_mb(void) {
 }
 
 static int64_t sys_cpus(void) {
+#if defined(_WIN32)
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  return (int64_t)si.dwNumberOfProcessors;
+#else
 #ifdef _SC_NPROCESSORS_ONLN
-  long n = sysconf(_SC_NPROCESSORS_ONLN);
-  if (n > 0) return (int64_t)n;
+  {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n > 0) return (int64_t)n;
+  }
 #endif
   return 0; /* unknown */
+#endif
+}
+
+static void sys_hostname(char *host, size_t cap) {
+#if defined(_WIN32)
+  DWORD n = (DWORD)cap;
+  if (!GetComputerNameExA(ComputerNameDnsHostname, host, &n))
+    memcpy(host, "unknown", sizeof "unknown");
+#else
+  if (gethostname(host, cap) != 0)
+    memcpy(host, "unknown", sizeof "unknown");
+#endif
+  host[cap - 1] = '\0'; /* may not be terminated when truncated */
 }
 
 int astd_tool_sys(astd_req *r) {
@@ -91,9 +115,7 @@ int astd_tool_sys(astd_req *r) {
     return 0;
   }
 
-  if (gethostname(host, sizeof host) != 0)
-    memcpy(host, "unknown", sizeof "unknown");
-  host[sizeof host - 1] = '\0'; /* gethostname may not terminate */
+  sys_hostname(host, sizeof host);
 
   res = xcdn_value_object();
   if (!res) goto oom;
@@ -113,5 +135,3 @@ oom:
   astd_fail(r, "astools/protocol", "out of memory");
   return 0;
 }
-
-#endif /* _WIN32 */

@@ -29,16 +29,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-
-int astd_tool_proc(astd_req *r) {
-  astd_fail(r, "std/unsupported", "proc is not supported on Windows yet");
-  return 0;
-}
-
-#else /* POSIX */
-
 #include <errno.h>
+#ifdef _WIN32
+#include "compat_win32.h" /* must come after every system include */
+#else
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/select.h>
@@ -48,8 +42,26 @@ int astd_tool_proc(astd_req *r) {
 #include <unistd.h>
 
 extern char **environ;
+#endif
 
 #define PROC_STREAM_CAP 262144
+
+#ifdef _WIN32
+
+/* the shared Win32 spawn helper matches prun field for field */
+typedef astd_spawn_res prun;
+
+static int64_t mono_ms(void) { return astd_mono_ms(); }
+
+static int run_child(char *const *argv, char *const *envp, const char *cwd,
+                     const char *input, size_t input_n, size_t out_cap,
+                     size_t err_cap, int64_t timeout_ms, prun *rr, char *emsg,
+                     size_t emsg_sz) {
+  return astd_spawn_capture(argv, envp, cwd, input, input_n, out_cap,
+                            err_cap, timeout_ms, rr, emsg, emsg_sz);
+}
+
+#else /* POSIX */
 
 typedef struct {
   int exit_code;
@@ -297,6 +309,8 @@ spawn_fail:
   return -1;
 }
 
+#endif /* POSIX spawn */
+
 /* ISO 8601 duration, PnDTnHnMnS subset; fractions allowed. Returns 0
  * and milliseconds, or -1 on malformed input. */
 static int parse_duration_ms(const char *s, int64_t *out) {
@@ -465,7 +479,9 @@ int astd_tool_proc(astd_req *r) {
               bad_env ? "env values must be strings" : "out of memory");
     return 0;
   }
+#ifndef _WIN32
   signal(SIGPIPE, SIG_IGN);
+#endif
   t0 = mono_ms();
   if (run_child(argv, envp, cwd, input, input ? strlen(input) : 0,
                 PROC_STREAM_CAP, PROC_STREAM_CAP, timeout_ms, &rr, emsg,
@@ -516,5 +532,3 @@ int astd_tool_proc(astd_req *r) {
   }
   return 0;
 }
-
-#endif /* POSIX */

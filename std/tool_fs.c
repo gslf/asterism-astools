@@ -13,23 +13,18 @@
 #endif
 
 #include "sdk.h"
-#ifdef _WIN32
-
-int astd_tool_fs(astd_req *r) {
-  astd_fail(r, "std/unsupported", "fs is not implemented on this platform");
-  return 0;
-}
-
-#else /* POSIX */
-
-#include <dirent.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h> /* rename */
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include "compat_win32.h" /* must come after every system include */
+#else
+#include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 enum {
   FS_IO_CHUNK = 65536,
@@ -1122,5 +1117,3 @@ int astd_tool_fs(astd_req *r) {
   astd_fail(r, "astools/invalid-args", "unknown fs command \"%s\"", cmd);
   return 0;
 }
-
-#endif /* _WIN32 */

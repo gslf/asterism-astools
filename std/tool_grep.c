@@ -21,19 +21,14 @@
 #include <string.h>
 
 #ifdef _WIN32
-
-int astd_tool_grep(astd_req *r) {
-  astd_fail(r, "std/unsupported", "grep is not supported on Windows yet");
-  return 0;
-}
-
-#else /* POSIX */
-
+#include "compat_win32.h" /* must come after every system include */
+#else
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #define GREP_TEXT_CAP 512
 #define GREP_MAX_DEPTH 64
@@ -436,5 +431,3 @@ int astd_tool_grep(astd_req *r) {
   astd_ok(r, res);
   return 0;
 }
-
-#endif /* POSIX */

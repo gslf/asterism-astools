@@ -451,6 +451,42 @@ astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on) {
   return ASTOOLS_OK;
 }
 
+astools_err astools_tool_state(astools_ctx *c, const char *ref,
+                               int *out_enabled, int *out_available) {
+  char *id = NULL;
+  const char *ver = NULL;
+  size_t i, matched = 0;
+  int enabled = 0, available = 0;
+  astools_err e;
+  if (!c || !ref)
+    return astools_seterr(c, ASTOOLS_ERR_INVALID,
+                          "tool_state: bad arguments");
+  if (out_enabled) *out_enabled = 0;
+  if (out_available) *out_available = 0;
+  e = ref_split(ref, &id, &ver);
+  if (e != ASTOOLS_OK)
+    return astools_seterr(c, e, "tool_state: invalid ref '%s'", ref);
+  os_rwlock_rdlock(&c->lock);
+  for (i = 0; i < c->tools_n; i++) {
+    const astools_tool *t = c->tools[i];
+    if (strcmp(t->m->id, id) != 0) continue;
+    if (ver && strcmp(t->m->version, ver) != 0) continue;
+    /* Mirror tool_enable: a bare id spans every version, so the id
+     * reads as enabled/available when any version is. */
+    if (t->enabled) enabled = 1;
+    if (t->available) available = 1;
+    matched++;
+  }
+  os_rwlock_rdunlock(&c->lock);
+  free(id);
+  if (matched == 0)
+    return astools_seterr(c, ASTOOLS_ERR_NOT_FOUND, "tool '%s' not found",
+                          ref);
+  if (out_enabled) *out_enabled = enabled;
+  if (out_available) *out_available = available;
+  return ASTOOLS_OK;
+}
+
 static const char *pin_version(const astools_config *cfg, const char *id) {
   size_t i;
   for (i = 0; i < cfg->pins_len; i++)
@@ -635,6 +671,20 @@ astools_err astools_get_stats(astools_ctx *c, astools_stats *out) {
    * case registry.c only updated the context field. */
   if (c->last_refresh_unix > out->last_refresh_unix)
     out->last_refresh_unix = c->last_refresh_unix;
+  os_rwlock_rdunlock(&c->lock);
+  return ASTOOLS_OK;
+}
+
+astools_err astools_get_readiness(astools_ctx *c, astools_readiness *out) {
+  if (!c || !out)
+    return astools_seterr(c, ASTOOLS_ERR_INVALID,
+                          "get_readiness: bad arguments");
+  memset(out, 0, sizeof *out);
+  os_rwlock_rdlock(&c->lock);
+  out->workspace_bound = c->workspace != NULL && c->workspace[0] != '\0';
+  out->workspace_access = c->cfg.workspace_access;
+  out->sandbox_level = c->cfg.sandbox_level;
+  out->tools_enabled = c->stats.tools_enabled;
   os_rwlock_rdunlock(&c->lock);
   return ASTOOLS_OK;
 }

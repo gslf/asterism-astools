@@ -22,7 +22,13 @@ endif()
 
 # Strict flags apply to astools translation units only (deps use their own).
 if(MSVC)
-  set(ASTOOLS_C_FLAGS /W4 /WX)
+  # /wd4244: int64->int narrowing warnings; the POSIX-first sources narrow
+  # deliberately where the values are already range-checked. /wd4456
+  # (local shadowing) is not part of the GCC/Clang -Wall set either.
+  set(ASTOOLS_C_FLAGS /W4 /WX /wd4244 /wd4456)
+  # getenv/fopen & co. are used portably; the _s variants are MSVC-only,
+  # and strdup & co. keep their POSIX names.
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
 else()
   set(ASTOOLS_C_FLAGS -Wall -Wextra -Wpedantic -Werror)
   # Public/internal headers expose pthread rwlocks and the POSIX backends use
@@ -65,6 +71,10 @@ if(NOT TARGET xcdn)
   else()
     add_subdirectory(deps/xcdn-c EXCLUDE_FROM_ALL)
   endif()
+  if(MSVC)
+    # xcdn uses POSIX strtok_r; MSVC spells it strtok_s (same contract).
+    target_compile_definitions(xcdn PRIVATE strtok_r=strtok_s)
+  endif()
 endif()
 # ── libastools ───────────────────────────────────────────────────────────────
 set(ASTOOLS_SOURCES
@@ -92,8 +102,8 @@ set(ASTOOLS_SOURCES
   src/os_common.c
 )
 if(WIN32)
-  list(APPEND ASTOOLS_SOURCES src/os_win32.c src/os_proc_stub.c
-       src/sandbox_stub.c)
+  list(APPEND ASTOOLS_SOURCES src/os_win32.c src/os_proc_win32.c
+       src/sandbox_win32.c)
 else()
   list(APPEND ASTOOLS_SOURCES src/os_posix.c src/os_proc_posix.c
        src/sandbox_posix.c)
@@ -119,6 +129,12 @@ add_library(astools_static STATIC $<TARGET_OBJECTS:astools_obj>)
 set_target_properties(astools_static PROPERTIES OUTPUT_NAME astools)
 add_library(astools_shared SHARED $<TARGET_OBJECTS:astools_obj>)
 set_target_properties(astools_shared PROPERTIES OUTPUT_NAME astools)
+if(WIN32)
+  # The DLL's import library is also named astools.lib and would overwrite
+  # astools_static's archive (last writer wins). Keep it in its own dir.
+  set_target_properties(astools_shared PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/shared-import)
+endif()
 
 foreach(tgt astools_static astools_shared)
   target_include_directories(${tgt} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -152,6 +168,9 @@ if(ASTOOLS_BUILD_STD)
     std/tool_proc.c
     std/tool_git.c
   )
+  if(WIN32)
+    list(APPEND ASTOOLS_STD_SOURCES std/compat_win32.c)
+  endif()
   if(ASTOOLS_BUILD_NET)
     list(APPEND ASTOOLS_STD_SOURCES std/tool_net.c)
   endif()

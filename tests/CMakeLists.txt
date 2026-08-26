@@ -76,12 +76,25 @@ foreach(t test_invoke test_escape)
   add_dependencies(${t} tool_fake)
 endforeach()
 
+set(ASTOOLS_TEST_ENV "ASTOOLS_TEST_TOOL=$<TARGET_FILE:tool_fake>")
+if(TARGET astools-jail)
+  list(APPEND ASTOOLS_TEST_ENV "ASTOOLS_JAIL=$<TARGET_FILE:astools-jail>")
+endif()
+
+if(TARGET astools-mcp)
+  add_test(NAME test_mcp_protocol
+    COMMAND ${CMAKE_COMMAND}
+      "-DMCP_EXE=$<TARGET_FILE:astools-mcp>"
+      "-DMCP_ROOT_FLAG=--workspace"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/mcp_smoke.cmake")
+  set_tests_properties(test_mcp_protocol PROPERTIES TIMEOUT 60)
+endif()
 set_tests_properties(${ASTOOLS_TESTS} PROPERTIES
   TIMEOUT 60
-  ENVIRONMENT "ASTOOLS_TEST_TOOL=$<TARGET_FILE:tool_fake>;ASTOOLS_JAIL=$<TARGET_FILE:astools-jail>")
+  ENVIRONMENT "${ASTOOLS_TEST_ENV}")
 
 # ── std-tool containment regressions (need the real astools-std packages) ────
-if(ASTOOLS_BUILD_STD)
+if(ASTOOLS_BUILD_STD AND NOT WIN32)
   add_executable(test_std_containment test_std_containment.c)
   target_include_directories(test_std_containment PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

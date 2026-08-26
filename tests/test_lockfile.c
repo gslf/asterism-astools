@@ -208,6 +208,13 @@ TEST(enforce_blocks_resolve_until_approved) {
     lk_drop(&f);
     return;
   }
+#if defined(_WIN32)
+  {
+    char *q;
+    for (q = f.root_raw; *q != '\0'; q++) if (*q == '\\') *q = '/';
+    for (q = ws_raw; *q != '\0'; q++) if (*q == '\\') *q = '/';
+  }
+#endif
   snprintf(cfg_path, sizeof cfg_path, "%s/config.xcdn", f.lock_raw);
   snprintf(cfg, sizeof cfg,
            "#astools_config {\n"

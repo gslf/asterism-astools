@@ -30,16 +30,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-
-int astd_tool_git(astd_req *r) {
-  astd_fail(r, "std/unsupported", "git is not supported on Windows yet");
-  return 0;
-}
-
-#else /* POSIX */
-
 #include <errno.h>
+#ifdef _WIN32
+#include "compat_win32.h" /* must come after every system include */
+#else
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/select.h>
@@ -48,6 +42,7 @@ int astd_tool_git(astd_req *r) {
 #include <unistd.h>
 
 extern char **environ;
+#endif
 
 #define GIT_STREAM_CAP 1048576
 
@@ -68,6 +63,28 @@ static void gres_free(gres *g) {
   free(g->err);
   g->out = g->err = NULL;
 }
+
+#ifdef _WIN32
+
+static int spawn_capture(char *const *argv, char *const *envp,
+                         const char *cwd, gres *g, char *emsg,
+                         size_t emsg_sz) {
+  astd_spawn_res rr;
+  memset(g, 0, sizeof *g);
+  if (astd_spawn_capture(argv, envp, cwd, NULL, 0, GIT_STREAM_CAP,
+                         GIT_STREAM_CAP, 0, &rr, emsg, emsg_sz) != 0)
+    return -1;
+  g->exit_code = rr.exit_code;
+  g->out = rr.out;
+  g->out_n = rr.out_n;
+  g->out_trunc = rr.out_trunc;
+  g->err = rr.err;
+  g->err_n = rr.err_n;
+  g->err_trunc = rr.err_trunc;
+  return 0;
+}
+
+#else /* POSIX */
 
 static int cap_append(char **buf, size_t *n, size_t *cap, size_t limit,
                       int *trunc, const char *src, size_t sn) {
@@ -239,6 +256,8 @@ spawn_fail:
   return -1;
 }
 
+#endif /* POSIX spawn */
+
 /* ---- git plumbing ------------------------------------------------------- */
 
 typedef struct {
@@ -247,19 +266,27 @@ typedef struct {
   char **envp; /* prepared child environment */
 } gtool;
 
+#ifdef _WIN32
+#define GIT_PATH_SEP ';'
+#define GIT_LEAF "/git.exe"
+#else
+#define GIT_PATH_SEP ':'
+#define GIT_LEAF "/git"
+#endif
+
 static char *find_git(void) {
   const char *path = getenv("PATH");
   const char *p;
   if (!path || !*path) return NULL;
   p = path;
   for (;;) {
-    const char *q = strchr(p, ':');
+    const char *q = strchr(p, GIT_PATH_SEP);
     size_t dl = q ? (size_t)(q - p) : strlen(p);
     if (dl > 0) { /* empty component means cwd: never exec from there */
-      char *cand = malloc(dl + 5);
+      char *cand = malloc(dl + sizeof GIT_LEAF);
       if (!cand) return NULL;
       memcpy(cand, p, dl);
-      memcpy(cand + dl, "/git", 5);
+      memcpy(cand + dl, GIT_LEAF, sizeof GIT_LEAF);
       if (access(cand, X_OK) == 0) return cand;
       free(cand);
     }
@@ -1144,7 +1171,9 @@ int astd_tool_git(astd_req *r) {
     astd_fail(r, "git/failed", "out of memory");
     return 0;
   }
+#ifndef _WIN32
   signal(SIGPIPE, SIG_IGN);
+#endif
   {
     const char *args[2] = {"rev-parse", "--git-dir"};
     if (run_git(&t, args, 2, &g, emsg, sizeof emsg) != 0) {
@@ -1182,5 +1211,3 @@ int astd_tool_git(astd_req *r) {
   free_env(t.envp);
   return 0;
 }
-
-#endif /* POSIX */

@@ -11,6 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 #include "sdk.h"
 typedef struct {
   const char *id;
@@ -46,6 +51,13 @@ int main(int argc, char **argv) {
   int (*fn)(astd_req *r) = NULL;
   size_t t;
   int i, rc;
+
+#ifdef _WIN32
+  /* the wire protocol is byte-exact: no CRLF translation, and no
+   * ctrl-Z end-of-input on the request */
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+#endif
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--tool") == 0) {

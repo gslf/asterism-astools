@@ -218,6 +218,14 @@ out:
 #endif /* !_WIN32 */
 
 TEST(path_under_boundaries) {
+#if defined(_WIN32)
+  ASSERT_EQ_INT(astools_path_under("C:/a/b", "c:/A"), 1);
+  ASSERT_EQ_INT(astools_path_under("C:/a", "C:/a"), 1);
+  ASSERT_EQ_INT(astools_path_under("C:/ab", "C:/a"), 0);
+  ASSERT_EQ_INT(astools_path_under("C:/anything/at/all", "c:/"), 1);
+  ASSERT_EQ_INT(astools_path_under("//server/share/a", "//SERVER/SHARE"), 1);
+  ASSERT_EQ_INT(astools_path_under("//server/other", "//server/share"), 0);
+#else
   ASSERT_EQ_INT(astools_path_under("/a/b", "/a"), 1);
   ASSERT_EQ_INT(astools_path_under("/a", "/a"), 1);   /* equal counts */
   ASSERT_EQ_INT(astools_path_under("/a", "/a/"), 1);  /* trailing slash */
@@ -226,6 +234,7 @@ TEST(path_under_boundaries) {
   ASSERT_EQ_INT(astools_path_under("/a/bc", "/a/b"), 0);
   ASSERT_EQ_INT(astools_path_under("/anything/at/all", "/"), 1);
   ASSERT_EQ_INT(astools_path_under("/", "/"), 1);
+#endif
   ASSERT_EQ_INT(astools_path_under("relative", "/a"), 0);
   ASSERT_EQ_INT(astools_path_under("/a", "relative"), 0);
   ASSERT_EQ_INT(astools_path_under(NULL, "/a"), 0);

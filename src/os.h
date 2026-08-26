@@ -5,7 +5,8 @@
  * The baseline section (threads/fs/misc) is shared with the Asper sibling
  * and implemented by os_posix.c + os_common.c (os_win32.c on Windows).
  * The process/path section below is astools-specific and implemented by
- * os_proc_posix.c (os_proc_win32.c is future work — status in docs).
+ * os_proc_posix.c (os_proc_win32.c on Windows: pipes and kill-trees ride
+ * on Job Objects; see that file's header for the exact mapping).
  *
  * With ASTOOLS_NO_THREADS defined, the locking primitives compile to no-ops
  * and os_thread_start returns ASTOOLS_ERR_INVALID.
