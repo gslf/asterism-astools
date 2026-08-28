@@ -48,31 +48,28 @@ extern char **environ;
 
 #ifdef _WIN32
 
-/* the shared Win32 spawn helper matches prun field for field */
-typedef astd_spawn_res prun;
-
 static int64_t mono_ms(void) { return astd_mono_ms(); }
 
-static int run_child(char *const *argv, char *const *envp, const char *cwd,
+int astd_run_capture(char *const *argv, char *const *envp, const char *cwd,
                      const char *input, size_t input_n, size_t out_cap,
-                     size_t err_cap, int64_t timeout_ms, prun *rr, char *emsg,
-                     size_t emsg_sz) {
-  return astd_spawn_capture(argv, envp, cwd, input, input_n, out_cap,
-                            err_cap, timeout_ms, rr, emsg, emsg_sz);
+                     size_t err_cap, int64_t timeout_ms, astd_run_res *rr,
+                     char *emsg, size_t emsg_sz) {
+  astd_spawn_res wr;
+  int rc = astd_spawn_capture(argv, envp, cwd, input, input_n, out_cap,
+                              err_cap, timeout_ms, &wr, emsg, emsg_sz);
+  if (rc != 0) return rc;
+  rr->exit_code = wr.exit_code;
+  rr->timed_out = wr.timed_out;
+  rr->out = wr.out;
+  rr->out_n = wr.out_n;
+  rr->out_trunc = wr.out_trunc;
+  rr->err = wr.err;
+  rr->err_n = wr.err_n;
+  rr->err_trunc = wr.err_trunc;
+  return 0;
 }
 
 #else /* POSIX */
-
-typedef struct {
-  int exit_code;
-  int timed_out;
-  char *out;
-  size_t out_n;
-  int out_trunc;
-  char *err;
-  size_t err_n;
-  int err_trunc;
-} prun;
 
 static int64_t mono_ms(void) {
   struct timespec ts;
@@ -126,10 +123,10 @@ static void child_report(int fd, char stage) {
 /* Spawn argv with envp, feed input, capture both streams with caps.
  * timeout_ms 0 = no local deadline. Returns 0, or -1 with emsg set
  * (spawn/exec failure — nothing ran). */
-static int run_child(char *const *argv, char *const *envp, const char *cwd,
+int astd_run_capture(char *const *argv, char *const *envp, const char *cwd,
                      const char *input, size_t input_n, size_t out_cap,
-                     size_t err_cap, int64_t timeout_ms, prun *rr, char *emsg,
-                     size_t emsg_sz) {
+                     size_t err_cap, int64_t timeout_ms, astd_run_res *rr,
+                     char *emsg, size_t emsg_sz) {
   int inp[2] = {-1, -1}, outp[2] = {-1, -1};
   int errp[2] = {-1, -1}, exep[2] = {-1, -1};
   size_t ocap = 0, ecap = 0, inoff = 0;
@@ -430,7 +427,7 @@ int astd_tool_proc(astd_req *r) {
   size_t n, i;
   int64_t timeout_ms = 0, t0, elapsed;
   int bad_env = 0;
-  prun rr;
+  astd_run_res rr;
   char emsg[512];
   if (strcmp(r->command, "run") != 0) {
     astd_fail(r, "astools/protocol", "unknown proc command '%s'", r->command);
@@ -483,9 +480,9 @@ int astd_tool_proc(astd_req *r) {
   signal(SIGPIPE, SIG_IGN);
 #endif
   t0 = mono_ms();
-  if (run_child(argv, envp, cwd, input, input ? strlen(input) : 0,
-                PROC_STREAM_CAP, PROC_STREAM_CAP, timeout_ms, &rr, emsg,
-                sizeof emsg) != 0) {
+  if (astd_run_capture(argv, envp, cwd, input, input ? strlen(input) : 0,
+                       PROC_STREAM_CAP, PROC_STREAM_CAP, timeout_ms, &rr,
+                       emsg, sizeof emsg) != 0) {
     free(argv);
     free_env(envp);
     astd_fail(r, "proc/failed", "%s", emsg);

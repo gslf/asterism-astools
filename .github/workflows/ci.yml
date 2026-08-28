@@ -22,9 +22,9 @@ jobs:
         with:
           submodules: recursive
       - name: Configure
-        run: cmake -B build -DCMAKE_C_COMPILER=${{ matrix.cc }}
+        run: cmake -B build -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build build -j
+        run: cmake --build build --config Release --parallel 4
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 

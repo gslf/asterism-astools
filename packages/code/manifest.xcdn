@@ -1,0 +1,158 @@
+// astools standard suite — semantic, process-free coding primitives.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "code",
+  version: "1.0.0",
+  title: "Inspect and patch source code",
+  summary: "Read line ranges, find identifiers and apply unified patches.",
+  description: """
+    Bounded coding operations with closed schemas. None of these commands can
+    start a process. Prefer them to byte-oriented fs.read, free-form regex
+    search and generic editing when working on source code.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: { mode: "oneshot", entry: [
+    { os: "linux", arch: "x86_64",
+      argv: ["bin/linux-x86_64/astools-std", "--tool", "code"] },
+    { os: "macos", arch: "arm64",
+      argv: ["bin/macos-arm64/astools-std", "--tool", "code"] },
+    { os: "windows", arch: "x86_64",
+      argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "code"] },
+    { os: "macos", arch: "x86_64",
+      argv: ["bin/macos-x86_64/astools-std", "--tool", "code"] },
+    { os: "linux", arch: "arm64",
+      argv: ["bin/linux-arm64/astools-std", "--tool", "code"] },
+  ] },
+  permissions: {
+    fs: [{ path: "${workspace}", access: "read-write" }],
+    net: false, proc: false, env: [],
+  },
+  commands: [
+    #command {
+      name: "read-range",
+      summary: "Read an inclusive range of source lines.",
+      description: """
+        Returns at most 1000 lines, preserving their original line endings.
+        start_line and end_line are 1-based and inclusive. Use the returned
+        total_lines and truncated fields to choose the next range.
+      """,
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param { name: "path",
+          type: #type { kind: "path", access: "read", must_exist: true },
+          required: true, description: "Source file, workspace-relative." },
+        #param { name: "start_line", type: #type { kind: "integer", min: 1 },
+          default: 1, description: "First line to return (inclusive)." },
+        #param { name: "end_line", type: #type { kind: "integer", min: 1 },
+          default: 200, description: "Last line to return (inclusive)." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "content", type: #type { kind: "string" },
+          required: true, description: "Selected source text." },
+        #param { name: "start_line", type: #type { kind: "integer" },
+          required: true, description: "Requested first line." },
+        #param { name: "end_line", type: #type { kind: "integer" },
+          required: true, description: "Last line actually returned." },
+        #param { name: "total_lines", type: #type { kind: "integer" },
+          required: true, description: "Total lines in the file." },
+        #param { name: "truncated", type: #type { kind: "boolean" },
+          required: true, description: "True when later lines remain." },
+      ] }, description: "The selected line range and file bounds." },
+      errors: [
+        { code: "code/bad-range", description: "Range is reversed or exceeds 1000 lines." },
+        { code: "code/binary", description: "The target is not a text file." },
+        { code: "code/too-large", description: "The target exceeds the bounded read cap." },
+        { code: "code/not-found", description: "The target cannot be opened." },
+        { code: "code/io", description: "The operating system refused the read." },
+        { code: "code/failed", description: "The bounded operation ran out of memory." },
+      ],
+      examples: [#example {
+        call: { path: "src/main.c", start_line: 40, end_line: 60 },
+        result: { content: "static int run(void) {\n  return 0;\n}\n",
+          start_line: 40, end_line: 42, total_lines: 42, truncated: false },
+      }],
+    },
+    #command {
+      name: "search-symbol",
+      summary: "Find whole-identifier occurrences in source files.",
+      description: """
+        Accepts one identifier, not a regex. The tool constructs a bounded
+        whole-identifier search and returns matching lines in deterministic
+        file-walk order. Narrow path or glob when the result is truncated.
+      """,
+      annotations: { read_only: true, idempotent: true },
+      params: [
+        #param { name: "symbol", type: #type { kind: "string", min_len: 1, max_len: 256 },
+          required: true, description: "Identifier to locate; regex syntax is rejected." },
+        #param { name: "path", type: #type { kind: "path", access: "read" },
+          default: ".", description: "File or directory to search." },
+        #param { name: "glob", type: #type { kind: "string", min_len: 1 },
+          description: "Optional file-name filter such as *.c." },
+        #param { name: "max_results", type: #type { kind: "integer", min: 1, max: 200 },
+          default: 100, description: "Maximum matching lines returned." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "matches", required: true,
+          type: #type { kind: "array", item: #type { kind: "object", fields: [
+            #param { name: "path", type: #type { kind: "string" }, required: true,
+              description: "Workspace-relative file path." },
+            #param { name: "line", type: #type { kind: "integer" }, required: true,
+              description: "1-based matching line." },
+            #param { name: "column", type: #type { kind: "integer" }, required: true,
+              description: "1-based byte column of the bounded match." },
+            #param { name: "text", type: #type { kind: "string" }, required: true,
+              description: "Matching line, capped at 512 bytes." },
+          ] } }, description: "Whole-identifier matches." },
+        #param { name: "files_searched", type: #type { kind: "integer" }, required: true,
+          description: "Text files searched." },
+        #param { name: "files_skipped", type: #type { kind: "integer" }, required: true,
+          description: "Binary, oversized or inaccessible files skipped." },
+        #param { name: "truncated", type: #type { kind: "boolean" }, required: true,
+          description: "True when max_results stopped the search." },
+      ] }, description: "Identifier occurrences and search coverage." },
+      errors: [
+        { code: "code/bad-symbol", description: "symbol is not one identifier." },
+        { code: "code/failed", description: "The bounded search ran out of memory." },
+      ],
+      examples: [#example {
+        call: { symbol: "parse_config", path: "src", glob: "*.c" },
+        result: { matches: [{ path: "src/config.c", line: 81, column: 5,
+          text: "int parse_config(const char *path) {" }],
+          files_searched: 12, files_skipped: 0, truncated: false },
+      }],
+    },
+    #command {
+      name: "apply-patch",
+      summary: "Apply a unified source patch atomically.",
+      description: """
+        Applies a standard unified diff using workspace-relative paths. All
+        hunks succeed or every touched file is restored. This is the semantic
+        coding alias for edit.patch; it never invokes a system patch program.
+      """,
+      annotations: { destructive: true },
+      params: [
+        #param { name: "patch", type: #type { kind: "string", min_len: 1 },
+          required: true, description: "Unified diff text." },
+        #param { name: "strip", type: #type { kind: "integer", min: 0 },
+          default: 1, description: "Leading path components to strip." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "files_changed", type: #type { kind: "integer" }, required: true,
+          description: "Files changed by the patch." },
+        #param { name: "hunks_applied", type: #type { kind: "integer" }, required: true,
+          description: "Hunks applied across all files." },
+      ] }, description: "Atomic patch counters." },
+      errors: [
+        { code: "code/patch-failed", description: "A hunk failed; nothing changed." },
+        { code: "code/binary", description: "A target is not a text file." },
+        { code: "code/io", description: "The operating system refused the edit." },
+      ],
+      examples: [#example {
+        call: { patch: "--- a/src/main.c\n+++ b/src/main.c\n@@ -1 +1 @@\n-old\n+new\n" },
+        result: { files_changed: 1, hunks_applied: 1 },
+      }],
+    },
+  ],
+}

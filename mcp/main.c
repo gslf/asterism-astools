@@ -62,6 +62,8 @@ static const char k_config_template[] =
     "    // Allow kind \"library\" tools from full-trust roots (host"
     " privileges).\n"
     "    allow_library: false,\n"
+    "    // Absolute toolchain directories appended to the scrubbed PATH.\n"
+    "    executable_paths: [],\n"
     "  },\n"
     "  grants: {\n"
     "    // Automatic workspace subtree grant: \"none\" | \"read\" |"

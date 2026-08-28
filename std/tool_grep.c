@@ -353,6 +353,11 @@ static int64_t clamp64(int64_t v, int64_t lo, int64_t hi) {
   return v;
 }
 
+static const char *grep_error_code(const astd_req *r, const char *code) {
+  if (r->tool && strcmp(r->tool, "code") == 0) return "code/failed";
+  return code;
+}
+
 int astd_tool_grep(astd_req *r) {
   gctx g;
   const char *path;
@@ -390,14 +395,15 @@ int astd_tool_grep(astd_req *r) {
     const char *err = NULL;
     g.re = astd_regex_compile(g.pattern, g.case_sensitive, &err);
     if (!g.re) {
-      astd_fail(r, "grep/bad-pattern", "%s", err ? err : "invalid pattern");
+      astd_fail(r, grep_error_code(r, "grep/bad-pattern"), "%s",
+                err ? err : "invalid pattern");
       return 0;
     }
   }
   g.matches = xcdn_value_array();
   if (!g.matches) {
     astd_regex_free(g.re);
-    astd_fail(r, "grep/failed", "out of memory");
+    astd_fail(r, grep_error_code(r, "grep/failed"), "out of memory");
     return 0;
   }
   if (stat(path, &st) == 0) {
@@ -409,13 +415,13 @@ int astd_tool_grep(astd_req *r) {
   astd_regex_free(g.re);
   if (g.oom) {
     xcdn_value_free(g.matches);
-    astd_fail(r, "grep/failed", "out of memory");
+    astd_fail(r, grep_error_code(r, "grep/failed"), "out of memory");
     return 0;
   }
   res = xcdn_value_object();
   if (!res) {
     xcdn_value_free(g.matches);
-    astd_fail(r, "grep/failed", "out of memory");
+    astd_fail(r, grep_error_code(r, "grep/failed"), "out of memory");
     return 0;
   }
   rc |= astd_set_val(res, "matches", g.matches);
@@ -425,7 +431,7 @@ int astd_tool_grep(astd_req *r) {
   rc |= astd_set_bool(res, "truncated", g.truncated);
   if (rc != 0) {
     xcdn_value_free(res);
-    astd_fail(r, "grep/failed", "out of memory");
+    astd_fail(r, grep_error_code(r, "grep/failed"), "out of memory");
     return 0;
   }
   astd_ok(r, res);

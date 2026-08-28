@@ -190,6 +190,39 @@ static char *sysdir_dup(UINT (WINAPI *get)(LPWSTR, UINT)) {
   return s;
 }
 
+/* Build the deliberately small child PATH plus operator-approved toolchain
+ * directories. The host PATH is still never inherited implicitly. */
+static char *sandbox_path(const astools_ctx *c, const char *sys32,
+                          const char *windir, const char *gitdir) {
+  size_t i, need = strlen(sys32) + strlen(windir) + 1;
+  char *out, *p;
+  if (gitdir[0] != '\0') need += strlen(gitdir) + 1;
+  for (i = 0; i < c->cfg.executable_paths_len; i++) {
+    size_t n = strlen(c->cfg.executable_paths[i]);
+    if (need > SIZE_MAX - n - 1) return NULL;
+    need += n + 1;
+  }
+  out = malloc(need + 1);
+  if (!out) return NULL;
+  p = out;
+#define PATH_ADD(value)                                                        \
+  do {                                                                         \
+    const char *path_add_value = (value);                                      \
+    size_t path_add_len = strlen(path_add_value);                              \
+    if (p != out) *p++ = ';';                                                  \
+    memcpy(p, path_add_value, path_add_len);                                   \
+    p += path_add_len;                                                         \
+  } while (0)
+  PATH_ADD(sys32);
+  PATH_ADD(windir);
+  if (gitdir[0] != '\0') PATH_ADD(gitdir);
+  for (i = 0; i < c->cfg.executable_paths_len; i++)
+    PATH_ADD(c->cfg.executable_paths[i]);
+#undef PATH_ADD
+  *p = '\0';
+  return out;
+}
+
 /* ---- sandbox preparation -------------------------------------------- */
 
 astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
@@ -257,7 +290,6 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
      * %ProgramFiles%\Git\cmd — appended only when it actually exists,
      * never the caller's PATH. */
     char gitdir[MAX_PATH + 16];
-    size_t pn;
     char *pathv;
     char *comspec;
     gitdir[0] = '\0';
@@ -273,16 +305,11 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
                                     sizeof gitdir, NULL, NULL);
       }
     }
-    pn = strlen(sys32) + strlen(windir) + strlen(gitdir) + 3;
-    pathv = malloc(pn);
+    pathv = sandbox_path(c, sys32, windir, gitdir);
     if (!pathv) {
       e = astools_seterr(c, ASTOOLS_ERR_NOMEM, "sandbox: out of memory");
       goto fail;
     }
-    if (gitdir[0] != '\0')
-      (void)snprintf(pathv, pn, "%s;%s;%s", sys32, windir, gitdir);
-    else
-      (void)snprintf(pathv, pn, "%s;%s", sys32, windir);
     e = strv_push(&envp, &envn, &envcap, env_kv("PATH", pathv));
     free(pathv);
     if (e == ASTOOLS_OK)

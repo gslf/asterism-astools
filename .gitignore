@@ -68,3 +68,6 @@ build-*/
 
 # astools runtime state (dev workspaces)
 .astools/
+/workspace/
+/workspaces/
+*.log

@@ -167,6 +167,8 @@ if(ASTOOLS_BUILD_STD)
     std/tool_env.c
     std/tool_proc.c
     std/tool_git.c
+    std/tool_code.c
+    std/tool_project.c
   )
   if(WIN32)
     list(APPEND ASTOOLS_STD_SOURCES std/compat_win32.c)
@@ -187,7 +189,7 @@ if(ASTOOLS_BUILD_STD)
   endif()
 
   # Assemble ready-to-copy packages: manifest + per-platform binary.
-  set(ASTOOLS_STD_TOOLS fs grep edit sys env proc git)
+  set(ASTOOLS_STD_TOOLS fs grep edit sys env proc git code project)
   if(ASTOOLS_BUILD_NET)
     list(APPEND ASTOOLS_STD_TOOLS net)
   endif()

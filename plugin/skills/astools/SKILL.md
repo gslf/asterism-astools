@@ -5,8 +5,8 @@ description: Conventions for using the astools system tools — safe defaults, h
 
 # Using astools
 
-astools exposes local system tools (fs, grep, edit, sys, env, proc, git)
-through one MCP server. The tool manifests are the contract: argument
+astools exposes local system tools (code, project, fs, grep, edit, sys, env,
+proc, git) through one MCP server. The tool manifests are the contract: argument
 types are strict (no coercion — `"3"` is not an integer), defaults are
 injected for you, and every path argument is canonicalized and checked
 against operator grants before anything runs.
@@ -25,6 +25,11 @@ against operator grants before anything runs.
   prefer `edit.replace` / `edit.insert` / `edit.patch` over rewriting
   whole files with `fs.write`. The narrow operation fails loudly; the
   broad one destroys quietly.
+- For coding work, prefer `code.read-range`, `code.search-symbol` and
+  `code.apply-patch`; they expose line-, identifier- and patch-level intent
+  without processes. Prefer `project.build`, `project.test`, `project.lint`,
+  `project.format` and `project.diagnostics` over `proc.run`; their adapter
+  enum maps to fixed argv that the model cannot alter.
 
 ## Reading errors
 
@@ -39,7 +44,8 @@ against operator grants before anything runs.
 
 ## Off by default
 
-`proc.run` and the whole `git` tool need an explicit operator `proc`
-grant. Their absence is policy, not a bug: a denial here is the operator's
-decision, so do not treat it as an error to work around and do not retry
-it. Ask the user to grant the capability if the task genuinely needs it.
+`project`, `proc.run` and the whole `git` tool need an explicit per-tool
+operator `proc` grant. Their absence is policy, not a bug: a denial here is
+the operator's decision, so do not retry it. Grant `project` for semantic
+build workflows; that does not grant arbitrary `proc.run`. Ask for the
+broader `proc` tool only when no semantic action can express the task.

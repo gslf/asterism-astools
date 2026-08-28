@@ -82,6 +82,43 @@ static char *path_join(const char *a, const char *b) {
   return p;
 }
 
+/* fs.write receives a policy-checked canonical path.  Creating its missing
+ * parent chain here is therefore confined by the same workspace decision as
+ * the eventual open(2), and avoids turning a safe nested write into a
+ * planner retry loop. */
+static int ensure_parent_dirs(const char *path) {
+  char *copy, *last;
+  size_t i;
+  struct stat st;
+  if (path == NULL) { errno = EINVAL; return -1; }
+  copy = strdup(path);
+  if (copy == NULL) { errno = ENOMEM; return -1; }
+  last = strrchr(copy, '/');
+  if (last == NULL || last == copy) { free(copy); return 0; }
+  *last = '\0';
+  for (i = 1; copy[i] != '\0'; i++) {
+    if (copy[i] != '/' || copy[i - 1] == '/') continue;
+    copy[i] = '\0';
+    if (mkdir(copy, 0755) != 0 && errno != EEXIST) {
+      int e = errno;
+      free(copy);
+      errno = e;
+      return -1;
+    }
+    copy[i] = '/';
+  }
+  if (mkdir(copy, 0755) != 0) {
+    int e = errno;
+    if (e != EEXIST || stat(copy, &st) != 0 || !S_ISDIR(st.st_mode)) {
+      free(copy);
+      errno = e == EEXIST ? ENOTDIR : e;
+      return -1;
+    }
+  }
+  free(copy);
+  return 0;
+}
+
 static void free_names(char **v, size_t n) {
   size_t i;
   for (i = 0; i < n; i++) free(v[i]);
@@ -290,6 +327,7 @@ static int cmd_write(astd_req *r) {
   const char *content = astd_arg_str(r, "content", NULL);
   const char *mode = astd_arg_str(r, "mode", "create");
   const char *enc = astd_arg_str(r, "encoding", "utf8");
+  int parents = astd_arg_bool(r, "parents", 1);
   uint8_t *dec = NULL;
   const uint8_t *data;
   size_t dlen, off = 0;
@@ -329,6 +367,12 @@ static int cmd_write(astd_req *r) {
     return 0;
   }
 
+  if (parents && ensure_parent_dirs(path) != 0) {
+    int e = errno;
+    free(dec);
+    fail_errno(r, e, path);
+    return 0;
+  }
   fd = open(path, flags, 0644);
   if (fd < 0) {
     int e = errno;

@@ -10,6 +10,7 @@
  *   flood       write an endless 'x' stream to stdout until killed
  *   badproto    print garbage on stdout, exit 0
  *   noresponse  read stdin, exit 0 silently
+ *   pathprobe   report whether PATH contains the configured test marker
  *
  * Deliberately self-contained: it copies the minimal request parsing
  * inline (invocation_id + args are enough) instead of including std/sdk.h,
@@ -228,6 +229,11 @@ static int do_request_behavior(const char *behavior) {
     if (fd >= 0) close(fd);
     respond_ok(id, fd >= 0 ? "{socket_ok: true}" : "{socket_ok: false}");
 #endif
+  } else if (strcmp(behavior, "pathprobe") == 0) {
+    const char *path = getenv("PATH");
+    respond_ok(id, path != NULL && strstr(path, "astools-explicit-bin") != NULL
+                       ? "{found: true}"
+                       : "{found: false}");
   } else { /* echo */
     xcdn_node_t *args = detach_args(req);
     char *text = NULL;
@@ -248,7 +254,8 @@ int main(int argc, char **argv) {
   if (strcmp(behavior, "echo") == 0 || strcmp(behavior, "sleep") == 0 ||
       strcmp(behavior, "crash") == 0 || strcmp(behavior, "badproto") == 0 ||
       strcmp(behavior, "noresponse") == 0 ||
-      strcmp(behavior, "netprobe") == 0)
+      strcmp(behavior, "netprobe") == 0 ||
+      strcmp(behavior, "pathprobe") == 0)
     return do_request_behavior(behavior);
 
   fprintf(stderr, "tool_fake: unknown behavior '%s'\n", behavior);

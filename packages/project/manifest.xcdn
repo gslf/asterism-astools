@@ -1,0 +1,185 @@
+// astools standard suite — closed-argv project workflows.
+
+#astools_tool {
+  manifest_version: 1,
+  id: "project",
+  version: "1.0.0",
+  title: "Build and verify projects",
+  summary: "Build, test, lint, format and diagnose through detected adapters.",
+  description: """
+    Semantic project actions for small coding models. The caller selects only
+    an action, a workspace path and a closed adapter enum; executable names,
+    argv, environment and stdin are constructed by the tool. Granting proc to
+    project enables these workflows without enabling arbitrary proc.run.
+  """,
+  kind: "executable",
+  platforms: ["linux", "macos", "windows"],
+  runtime: { mode: "oneshot", entry: [
+    { os: "linux", arch: "x86_64",
+      argv: ["bin/linux-x86_64/astools-std", "--tool", "project"] },
+    { os: "macos", arch: "arm64",
+      argv: ["bin/macos-arm64/astools-std", "--tool", "project"] },
+    { os: "windows", arch: "x86_64",
+      argv: ["bin/windows-x86_64/astools-std.exe", "--tool", "project"] },
+    { os: "macos", arch: "x86_64",
+      argv: ["bin/macos-x86_64/astools-std", "--tool", "project"] },
+    { os: "linux", arch: "arm64",
+      argv: ["bin/linux-arm64/astools-std", "--tool", "project"] },
+  ] },
+  permissions: {
+    fs: [{ path: "${workspace}", access: "read-write" }],
+    net: false, proc: true, env: [],
+  },
+  commands: [
+    #command {
+      name: "build",
+      summary: "Configure and build the detected project.",
+      description: "Runs only the adapter's fixed configure/build argv.",
+      annotations: { destructive: true, long_running: true },
+      timeout: r"PT5M",
+      params: [
+        #param { name: "path", type: #type { kind: "path", access: "read-write", must_exist: true },
+          default: ".", description: "Project directory in the workspace." },
+        #param { name: "adapter", type: #type { kind: "enum", values: ["auto", "cmake", "cargo", "npm", "python"] },
+          default: "auto", description: "Build adapter; auto detects a project marker." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "adapter", type: #type { kind: "string" }, required: true, description: "Selected adapter." },
+        #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Last executed step's exit code." },
+        #param { name: "steps", required: true, description: "Executed fixed-argv steps.",
+          type: #type { kind: "array", item: #type { kind: "object", fields: [
+            #param { name: "program", type: #type { kind: "string" }, required: true, description: "Fixed adapter executable." },
+            #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Step exit code." },
+            #param { name: "stdout", type: #type { kind: "string" }, required: true, description: "Captured stdout." },
+            #param { name: "stderr", type: #type { kind: "string" }, required: true, description: "Captured stderr." },
+            #param { name: "stdout_truncated", type: #type { kind: "boolean" }, required: true, description: "stdout hit its cap." },
+            #param { name: "stderr_truncated", type: #type { kind: "boolean" }, required: true, description: "stderr hit its cap." },
+          ] } }, },
+      ] }, description: "Structured output for each adapter step." },
+      errors: [
+        { code: "project/no-adapter", description: "No supported project marker or adapter." },
+        { code: "project/not-installed", description: "The fixed adapter executable is unavailable." },
+        { code: "project/failed", description: "The workflow could not be represented." },
+      ],
+      examples: [#example { call: {}, result: { adapter: "cmake", exit_code: 0,
+        steps: [{ program: "cmake", exit_code: 0, stdout: "", stderr: "",
+          stdout_truncated: false, stderr_truncated: false }] } }],
+    },
+    #command {
+      name: "test",
+      summary: "Run the detected project's test workflow.",
+      description: "Configures/builds first where the adapter requires it, then runs tests.",
+      annotations: { destructive: true, long_running: true },
+      timeout: r"PT5M",
+      params: [
+        #param { name: "path", type: #type { kind: "path", access: "read-write", must_exist: true }, default: ".", description: "Project directory." },
+        #param { name: "adapter", type: #type { kind: "enum", values: ["auto", "cmake", "cargo", "npm", "python"] }, default: "auto", description: "Closed adapter selection." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "adapter", type: #type { kind: "string" }, required: true, description: "Selected adapter." },
+        #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Last exit code." },
+        #param { name: "steps", required: true, description: "Executed steps.", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "program", type: #type { kind: "string" }, required: true, description: "Fixed executable." },
+          #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Step exit code." },
+          #param { name: "stdout", type: #type { kind: "string" }, required: true, description: "Captured stdout." },
+          #param { name: "stderr", type: #type { kind: "string" }, required: true, description: "Captured stderr." },
+          #param { name: "stdout_truncated", type: #type { kind: "boolean" }, required: true, description: "stdout cap hit." },
+          #param { name: "stderr_truncated", type: #type { kind: "boolean" }, required: true, description: "stderr cap hit." },
+        ] } }, },
+      ] }, description: "Test workflow result." },
+      errors: [
+        { code: "project/no-adapter", description: "No supported project marker or adapter." },
+        { code: "project/not-installed", description: "The fixed adapter executable is unavailable." },
+        { code: "project/failed", description: "The workflow could not be represented." },
+      ],
+      examples: [#example { call: {}, result: { adapter: "cargo", exit_code: 0, steps: [] } }],
+    },
+    #command {
+      name: "lint",
+      summary: "Run the detected project's lint workflow.",
+      description: "Uses only the fixed lint command for the selected adapter.",
+      annotations: { destructive: true, long_running: true },
+      timeout: r"PT5M",
+      params: [
+        #param { name: "path", type: #type { kind: "path", access: "read-write", must_exist: true }, default: ".", description: "Project directory." },
+        #param { name: "adapter", type: #type { kind: "enum", values: ["auto", "cmake", "cargo", "npm", "python"] }, default: "auto", description: "Closed adapter selection." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "adapter", type: #type { kind: "string" }, required: true, description: "Selected adapter." },
+        #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Last exit code." },
+        #param { name: "steps", required: true, description: "Executed steps.", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "program", type: #type { kind: "string" }, required: true, description: "Fixed executable." },
+          #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Step exit code." },
+          #param { name: "stdout", type: #type { kind: "string" }, required: true, description: "Captured stdout." },
+          #param { name: "stderr", type: #type { kind: "string" }, required: true, description: "Captured stderr." },
+          #param { name: "stdout_truncated", type: #type { kind: "boolean" }, required: true, description: "stdout cap hit." },
+          #param { name: "stderr_truncated", type: #type { kind: "boolean" }, required: true, description: "stderr cap hit." },
+        ] } }, },
+      ] }, description: "Lint workflow result." },
+      errors: [
+        { code: "project/no-adapter", description: "No supported project marker or adapter." },
+        { code: "project/not-installed", description: "The fixed adapter executable is unavailable." },
+        { code: "project/failed", description: "The workflow could not be represented." },
+      ],
+      examples: [#example { call: {}, result: { adapter: "npm", exit_code: 0, steps: [] } }],
+    },
+    #command {
+      name: "format",
+      summary: "Format source through the detected project adapter.",
+      description: "Runs the fixed mutating formatter command; no flags can be supplied.",
+      annotations: { destructive: true, long_running: true },
+      timeout: r"PT5M",
+      params: [
+        #param { name: "path", type: #type { kind: "path", access: "read-write", must_exist: true }, default: ".", description: "Project directory." },
+        #param { name: "adapter", type: #type { kind: "enum", values: ["auto", "cmake", "cargo", "npm", "python"] }, default: "auto", description: "Closed adapter selection." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "adapter", type: #type { kind: "string" }, required: true, description: "Selected adapter." },
+        #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Last exit code." },
+        #param { name: "steps", required: true, description: "Executed steps.", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "program", type: #type { kind: "string" }, required: true, description: "Fixed executable." },
+          #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Step exit code." },
+          #param { name: "stdout", type: #type { kind: "string" }, required: true, description: "Captured stdout." },
+          #param { name: "stderr", type: #type { kind: "string" }, required: true, description: "Captured stderr." },
+          #param { name: "stdout_truncated", type: #type { kind: "boolean" }, required: true, description: "stdout cap hit." },
+          #param { name: "stderr_truncated", type: #type { kind: "boolean" }, required: true, description: "stderr cap hit." },
+        ] } }, },
+      ] }, description: "Format workflow result." },
+      errors: [
+        { code: "project/no-adapter", description: "No supported project marker or adapter." },
+        { code: "project/not-installed", description: "The fixed adapter executable is unavailable." },
+        { code: "project/failed", description: "The workflow could not be represented." },
+      ],
+      examples: [#example { call: {}, result: { adapter: "python", exit_code: 0, steps: [] } }],
+    },
+    #command {
+      name: "diagnostics",
+      summary: "Collect compiler or type-checker diagnostics.",
+      description: "Runs the adapter's fixed non-test verification workflow and captures stderr/stdout.",
+      annotations: { destructive: true, long_running: true },
+      timeout: r"PT5M",
+      params: [
+        #param { name: "path", type: #type { kind: "path", access: "read-write", must_exist: true }, default: ".", description: "Project directory." },
+        #param { name: "adapter", type: #type { kind: "enum", values: ["auto", "cmake", "cargo", "npm", "python"] }, default: "auto", description: "Closed adapter selection." },
+      ],
+      returns: { type: #type { kind: "object", fields: [
+        #param { name: "adapter", type: #type { kind: "string" }, required: true, description: "Selected adapter." },
+        #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Last exit code." },
+        #param { name: "steps", required: true, description: "Executed steps.", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "program", type: #type { kind: "string" }, required: true, description: "Fixed executable." },
+          #param { name: "exit_code", type: #type { kind: "integer" }, required: true, description: "Step exit code." },
+          #param { name: "stdout", type: #type { kind: "string" }, required: true, description: "Captured stdout." },
+          #param { name: "stderr", type: #type { kind: "string" }, required: true, description: "Captured stderr." },
+          #param { name: "stdout_truncated", type: #type { kind: "boolean" }, required: true, description: "stdout cap hit." },
+          #param { name: "stderr_truncated", type: #type { kind: "boolean" }, required: true, description: "stderr cap hit." },
+        ] } }, },
+      ] }, description: "Diagnostic workflow result." },
+      errors: [
+        { code: "project/no-adapter", description: "No supported project marker or adapter." },
+        { code: "project/not-installed", description: "The fixed adapter executable is unavailable." },
+        { code: "project/failed", description: "The workflow could not be represented." },
+      ],
+      examples: [#example { call: {}, result: { adapter: "cmake", exit_code: 1, steps: [] } }],
+    },
+  ],
+}

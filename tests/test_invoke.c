@@ -83,6 +83,9 @@ static int inv_setup_level(inv_fx *f, const char *sandbox_extra) {
   if (!fake_registry_write(f->root_raw, "netp", tool_path(), "netprobe",
                            NULL, FAKE_CMD_RUN_EMPTY, NULL))
     return 0;
+  if (!fake_registry_write(f->root_raw, "pathp", tool_path(), "pathprobe",
+                           NULL, FAKE_CMD_RUN_EMPTY, NULL))
+    return 0;
 
   snprintf(f->cfg_path, sizeof f->cfg_path, "%s/config.xcdn", f->cfg_raw);
   {
@@ -490,6 +493,33 @@ TEST(strict_linux_executes_when_available) {
   inv_drop(&f);
 }
 
+TEST(configured_executable_paths_reach_child) {
+  inv_fx f;
+  astools_result r;
+  int found = 0;
+  memset(&r, 0, sizeof r);
+#if defined(_WIN32)
+  if (!inv_setup_level(
+          &f,
+          "sandbox: { executable_paths: [\"C:/astools-explicit-bin\"] },")) {
+#else
+  if (!inv_setup_level(
+          &f,
+          "sandbox: { executable_paths: [\"/astools-explicit-bin\"] },")) {
+#endif
+    ASTOOLS_FAILF("executable-path setup failed");
+    inv_drop(&f);
+    return;
+  }
+  ASSERT_EQ_INT(f.c->cfg.executable_paths_len, 1);
+  ASSERT_OK(astools_invoke(f.c, "pathp", "run", "{}", 2000, &r));
+  ASSERT_EQ_INT(r.ok, 1);
+  ASSERT_TRUE(result_bool(r.result_xcdn, "found", &found));
+  ASSERT_EQ_INT(found, 1);
+  astools_result_free(&r);
+  inv_drop(&f);
+}
+
 TEST_LIST = {
   TEST_ENTRY(echo_canonical_path_and_default),
   TEST_ENTRY(validation_errors),
@@ -501,6 +531,7 @@ TEST_LIST = {
   TEST_ENTRY(sequential_invocations_reuse_context),
   TEST_ENTRY(async_cancel_is_race_free_and_fast),
   TEST_ENTRY(strict_linux_executes_when_available),
+  TEST_ENTRY(configured_executable_paths_reach_child),
 };
 
 RUN_ALL_TESTS()

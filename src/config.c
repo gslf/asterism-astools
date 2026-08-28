@@ -645,6 +645,24 @@ static astools_err parse_sec_sandbox(const xcdn_value_t *v,
     } else if (strcmp(k, "allow_library") == 0) {
       e = get_bool(kn, "sandbox.allow_library", &cfg->allow_library, err_msg);
       if (e != ASTOOLS_OK) return e;
+    } else if (strcmp(k, "executable_paths") == 0) {
+      char **arr = NULL;
+      size_t alen = 0, j;
+      e = parse_str_array(kn->value, "sandbox.executable_paths", &arr, &alen,
+                          err_msg);
+      if (e != ASTOOLS_OK) return e;
+      for (j = 0; j < alen; j++) {
+        if (arr[j][0] == '\0' || !os_path_is_abs(arr[j])) {
+          free_str_array(arr, alen);
+          return cfg_fail(err_msg,
+                          "config: sandbox.executable_paths[%zu]: expected "
+                          "an absolute non-empty directory path",
+                          j);
+        }
+      }
+      free_str_array(cfg->executable_paths, cfg->executable_paths_len);
+      cfg->executable_paths = arr;
+      cfg->executable_paths_len = alen;
     } else {
       return cfg_fail(err_msg, "config: sandbox.%s: unknown key", k);
     }
@@ -945,6 +963,8 @@ void astools_config_defaults(astools_config *cfg) {
   cfg->sandbox_level = ASTOOLS_SB_BASIC;
   cfg->strict_fallback_reject = false;
   cfg->allow_library = false;
+  cfg->executable_paths = NULL;
+  cfg->executable_paths_len = 0;
   cfg->workspace_access = ASTOOLS_ACCESS_RW;
   cfg->tool_grants = NULL;
   cfg->tool_grants_len = 0;
@@ -1078,6 +1098,7 @@ void astools_config_free(astools_config *cfg) {
   free_pins(cfg->pins, cfg->pins_len);
   free(cfg->workspace_root);
   free(cfg->scratch);
+  free_str_array(cfg->executable_paths, cfg->executable_paths_len);
   free_grants(cfg->tool_grants, cfg->tool_grants_len);
   free_str_array(cfg->priority, cfg->priority_len);
   free(cfg->log_path);

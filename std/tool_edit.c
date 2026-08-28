@@ -918,6 +918,13 @@ bad:
   return -1;
 }
 
+static const char *patch_error_code(const astd_req *r, const char *code) {
+  if (!r->tool || strcmp(r->tool, "code") != 0) return code;
+  if (code && strcmp(code, "edit/binary") == 0) return "code/binary";
+  if (code && strcmp(code, "edit/io") == 0) return "code/io";
+  return "code/patch-failed";
+}
+
 static void cmd_patch(astd_req *r) {
   const char *ptext = astd_arg_str(r, "patch", NULL);
   int64_t strip = astd_arg_int(r, "strip", 1);
@@ -1241,7 +1248,8 @@ static void cmd_patch(astd_req *r) {
       free(plines);
       free(hs);
       tgts_free(tg, ntg);
-      astd_fail(r, "edit/io", "patch applied but result reporting failed");
+      astd_fail(r, patch_error_code(r, "edit/io"),
+                "patch applied but result reporting failed");
       return;
     }
     free(copy);
@@ -1273,7 +1281,9 @@ fail:
   free(plines);
   free(hs);
   tgts_free(tg, ntg);
-  astd_fail(r, fail_code ? fail_code : "edit/patch-failed", "%s", emsg);
+  astd_fail(r, patch_error_code(
+                    r, fail_code ? fail_code : "edit/patch-failed"),
+            "%s", emsg);
 }
 
 /* ---- dispatch ----------------------------------------------------------- */

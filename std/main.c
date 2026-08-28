@@ -30,6 +30,8 @@ static const astd_tool_entry k_tools[] = {
   { "env", astd_tool_env },
   { "proc", astd_tool_proc },
   { "git", astd_tool_git },
+  { "code", astd_tool_code },
+  { "project", astd_tool_project },
 #ifdef ASTOOLS_BUILD_NET
   { "net", astd_tool_net },
 #endif

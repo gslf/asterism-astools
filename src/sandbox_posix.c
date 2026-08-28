@@ -160,6 +160,30 @@ static bool env_name_reserved(const char *name) {
   return false;
 }
 
+/* Fixed system search roots plus explicit operator-approved additions. */
+static char *sandbox_path(const astools_ctx *c) {
+  static const char base[] = "/usr/bin:/bin:/usr/sbin:/sbin";
+  size_t i, need = sizeof base;
+  char *out, *p;
+  for (i = 0; i < c->cfg.executable_paths_len; i++) {
+    size_t n = strlen(c->cfg.executable_paths[i]);
+    if (need > SIZE_MAX - n - 1) return NULL;
+    need += n + 1;
+  }
+  out = malloc(need);
+  if (!out) return NULL;
+  memcpy(out, base, sizeof base);
+  p = out + sizeof base - 1;
+  for (i = 0; i < c->cfg.executable_paths_len; i++) {
+    size_t n = strlen(c->cfg.executable_paths[i]);
+    *p++ = ':';
+    memcpy(p, c->cfg.executable_paths[i], n);
+    p += n;
+  }
+  *p = '\0';
+  return out;
+}
+
 /* ---- jail discovery + strict profiles -------------------------- */
 
 /*
@@ -459,8 +483,12 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
 
   /* 3. Environment, rebuilt from scratch — the host environment never
    * leaks except through explicit env grants. */
-  e = strv_push(&envp, &envn, &envcap,
-                astools_strdup("PATH=/usr/bin:/bin:/usr/sbin:/sbin"));
+  {
+    char *pathv = sandbox_path(c);
+    e = strv_push(&envp, &envn, &envcap,
+                  pathv != NULL ? env_kv("PATH", pathv) : NULL);
+    free(pathv);
+  }
   if (e == ASTOOLS_OK)
     e = strv_push(&envp, &envn, &envcap, env_kv("HOME", scratch));
   if (e == ASTOOLS_OK)

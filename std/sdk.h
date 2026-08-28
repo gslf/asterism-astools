@@ -84,6 +84,25 @@ int astd_glob_match(const char *pattern, const char *path);
 /* 1 when buf[0..n) looks binary (NUL byte in the first 4 KiB). */
 int astd_looks_binary(const char *buf, size_t n);
 
+/* ---- child process runner ----------------------------------------------
+ * Shared by proc.run and closed-argv semantic wrappers.  This is an
+ * implementation detail of astools-std, not part of libastools. */
+typedef struct {
+  int exit_code;
+  int timed_out;
+  char *out;
+  size_t out_n;
+  int out_trunc;
+  char *err;
+  size_t err_n;
+  int err_trunc;
+} astd_run_res;
+
+int astd_run_capture(char *const *argv, char *const *envp, const char *cwd,
+                     const char *input, size_t input_n, size_t out_cap,
+                     size_t err_cap, int64_t timeout_ms, astd_run_res *rr,
+                     char *emsg, size_t emsg_sz);
+
 /* ---- tool entry points (tool_*.c) ---------------------------------------
  * Called after astd_req_read; each returns the process exit code (0 unless
  * the response could not be written). */
@@ -94,6 +113,8 @@ int astd_tool_sys(astd_req *r);
 int astd_tool_env(astd_req *r);
 int astd_tool_proc(astd_req *r);
 int astd_tool_git(astd_req *r);
+int astd_tool_code(astd_req *r);
+int astd_tool_project(astd_req *r);
 #ifdef ASTOOLS_BUILD_NET
 int astd_tool_net(astd_req *r);
 #endif

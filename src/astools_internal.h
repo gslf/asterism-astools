@@ -463,6 +463,8 @@ typedef struct {
   int sandbox_level; /* ASTOOLS_SB_* */
   bool strict_fallback_reject;
   bool allow_library;
+  char **executable_paths; /* operator-approved PATH additions */
+  size_t executable_paths_len;
   /* grants */
   int workspace_access; /* 0 none | ASTOOLS_ACCESS_READ | _RW */
   astools_grant *tool_grants;

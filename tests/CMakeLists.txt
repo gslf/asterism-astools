@@ -94,6 +94,22 @@ set_tests_properties(${ASTOOLS_TESTS} PROPERTIES
   ENVIRONMENT "${ASTOOLS_TEST_ENV}")
 
 # ── std-tool containment regressions (need the real astools-std packages) ────
+if(ASTOOLS_BUILD_STD)
+  add_executable(test_std_semantic test_std_semantic.c)
+  target_include_directories(test_std_semantic PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../deps/xcdn-c/src)
+  target_compile_options(test_std_semantic PRIVATE ${ASTOOLS_C_FLAGS})
+  target_compile_definitions(test_std_semantic PRIVATE
+    "ASTOOLS_STD_PACKAGES=\"${CMAKE_BINARY_DIR}/packages\"")
+  target_link_libraries(test_std_semantic PRIVATE astools_static xcdn)
+  add_dependencies(test_std_semantic astools_packages)
+  add_test(NAME test_std_semantic COMMAND test_std_semantic)
+  set_tests_properties(test_std_semantic PROPERTIES TIMEOUT 60)
+endif()
+
 if(ASTOOLS_BUILD_STD AND NOT WIN32)
   add_executable(test_std_containment test_std_containment.c)
   target_include_directories(test_std_containment PRIVATE

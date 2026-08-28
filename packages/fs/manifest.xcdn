@@ -116,9 +116,10 @@
         fs/exists when the file is already there — that guard is
         intentional; pass mode "overwrite" only when replacing the file is
         the actual intent, or "append" to add to it. Missing parent
-        directories are not created: call fs.mkdir first. For binary data
-        send base64 content with encoding "base64". Prefer the edit tool
-        for changing parts of an existing text file.
+        directories are created by default inside the policy-checked
+        workspace; pass parents false to require an existing parent. For
+        binary data send base64 content with encoding "base64". Prefer the
+        edit tool for changing parts of an existing text file.
       """,
       annotations: { destructive: true },
       params: [
@@ -147,6 +148,12 @@
           default: "utf8",
           description: "Encoding of content.",
         },
+        #param {
+          name: "parents",
+          type: #type { kind: "boolean" },
+          default: true,
+          description: "Create missing parent directories inside the workspace.",
+        },
       ],
       returns: {
         type: #type { kind: "object", fields: [
@@ -161,7 +168,7 @@
           description: "mode create, but the file already exists." },
         { code: "fs/is-dir", description: "The path is a directory." },
         { code: "fs/not-found",
-          description: "A parent directory is missing." },
+          description: "parents false and a parent directory is missing." },
         { code: "fs/io", description: "The operating system refused the write." },
       ],
       examples: [

@@ -11,7 +11,7 @@ A *tool* is a directory dropped into a registry root. One xCDN manifest inside i
 |---|---|
 | `libastools` | C99 library: registry, manifest/type engine, argument validation, policy, sandboxed invocation, catalog / GBNF / JSON Schema generation |
 | `astools-mcp` | MCP server over stdio exposing every registered tool |
-| `astools-std` | The standard suite — `fs`, `grep`, `edit`, `git`, `proc`, `sys`, `env` (+ optional `net`) — packaged like any third-party tool |
+| `astools-std` | The standard suite — semantic `code` / `project` tools plus `fs`, `grep`, `edit`, `git`, `proc`, `sys`, `env` (+ optional `net`) — packaged like any third-party tool |
 | `astools-check` | Manifest validator/linter, catalog preview, lockfile approval, plugin lint |
 | `astools-jail` | Internal sandbox helper (Seatbelt on macOS) |
 | `astools-plugin` | Agent Plugins 1.0.0 package pointing any conformant client at `astools-mcp` |
@@ -63,6 +63,18 @@ astools_invoke(c, "fs", "read", "{path: \"notes/todo.txt\"}", 0, &r);
 ## Safety model
 
 Deny by default: a manifest *requests* permissions, only the host *grants* them, and the effective set is the intersection. Every executable tool runs as a child process with a scrubbed environment, a private scratch cwd, a wall-clock deadline, and output caps; `path`-typed arguments are canonicalized and checked against the grants before anything spawns. The `strict` sandbox level adds kernel enforcement where the platform provides it (Seatbelt on macOS), and `astools_get_sandbox_caps` reports honestly what is actually enforced.
+
+The scrubbed `PATH` contains only fixed system directories by default. Add
+operator-approved compiler and build-system directories with
+`sandbox.executable_paths`, for example
+`["C:/llvm/bin", "C:/Program Files/CMake/bin"]` on Windows. These entries are
+visible to both `proc.run` and the closed-argv `project.*` workflows without
+implicitly inheriting the host's complete `PATH`.
+
+For coding agents, prefer `project.build` / `test` / `lint` / `format` /
+`diagnostics` and `code.read-range` / `search-symbol` / `apply-patch`.
+Their schemas contain no executable or argv field. The `project` proc grant is
+scoped to that tool and does not enable the arbitrary `proc.run` escape hatch.
 
 
 ## License
