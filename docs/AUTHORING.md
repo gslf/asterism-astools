@@ -1,6 +1,6 @@
 # Authoring an astools tool
 
-A tool is a directory. Everything the runtime and the model need to know about it lives in one file, `manifest.xcdn`. This guide walks through building a tool from scratch. The `docs/SPEC.md` is the binding reference and
+A tool is a directory. Everything the runtime and the model need to know about it lives in one file, `manifest.xcdn`. This guide walks through building a tool from scratch. `docs/SPECS.md` explains the architecture, and
 `packages/fs/manifest.xcdn` is a complete worked example.
 
 ## 1. Layout

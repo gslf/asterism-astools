@@ -4,6 +4,8 @@
 
 A *tool* is a directory dropped into a registry root. One xCDN manifest inside it is simultaneously the machine contract (commands, typed parameters, constraints, permissions) and the conversational interface (descriptions and worked examples the model reads).
 
+Architecture and design: [docs/SPECS.md](docs/SPECS.md).
+
 
 ## What ships
 

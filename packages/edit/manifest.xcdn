@@ -176,9 +176,11 @@
       description: """
         Applies a standard unified diff. File paths inside the patch are
         resolved workspace-relative after stripping `strip` leading
-        components (strip 1 turns a/src/main.c into src/main.c). If any
-        hunk fails to apply, the whole patch is rolled back and nothing on
-        disk changes — fix the diff and retry, do not re-apply partially.
+        components (strip 1 turns a/src/main.c into src/main.c). A hunk whose
+        line number shifted is relocated when its old-side text has one unique
+        match; ambiguous hunks fail. If any hunk fails to apply, the whole
+        patch is rolled back and nothing on disk changes — fix the diff and
+        retry, do not re-apply partially.
       """,
       annotations: { destructive: true },
       params: [

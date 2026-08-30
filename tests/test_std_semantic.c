@@ -131,8 +131,49 @@ TEST(code_commands_and_proc_isolation) {
   astools_test_rmtree(ws);
 }
 
+TEST(edit_patch_relocates_unique_stale_hunk) {
+  char ws[256], source[512];
+  const char *roots[2] = {ASTOOLS_STD_PACKAGES, NULL};
+  astools_open_params op;
+  astools_ctx *c = NULL;
+  astools_result r;
+  char *after;
+
+  ASSERT_TRUE(astools_test_tmpdir(ws));
+  snprintf(source, sizeof source, "%s/shifted.c", ws);
+  ASSERT_TRUE(write_text(source,
+                         "/* lines inserted after the diff was made */\n"
+                         "#define FEATURE 1\n"
+                         "static int terminal_initialized = 0;\n"
+                         "\n"
+                         "static void die(void) {}\n"));
+  memset(&op, 0, sizeof op);
+  op.registry_paths = roots;
+  op.workspace_root = ws;
+  ASSERT_OK(astools_open(&op, &c));
+
+  memset(&r, 0, sizeof r);
+  ASSERT_OK(astools_invoke(
+      c, "edit", "patch",
+      "{patch: \"--- a/shifted.c\\n+++ b/shifted.c\\n@@ -1,3 +1,5 @@\\n"
+      " static int terminal_initialized = 0;\\n \\n"
+      "+static void restore_terminal(void);\\n+\\n"
+      " static void die(void) {}\\n\"}",
+      0, &r));
+  ASSERT_EQ_INT(r.ok, 1);
+  astools_result_free(&r);
+  after = astools_test_read_file(source, NULL);
+  ASSERT_TRUE(after != NULL);
+  ASSERT_TRUE(strstr(after, "static void restore_terminal(void);\n\n"
+                            "static void die(void) {}") != NULL);
+  free(after);
+  astools_close(c);
+  astools_test_rmtree(ws);
+}
+
 TEST_LIST = {
   TEST_ENTRY(code_commands_and_proc_isolation),
+  TEST_ENTRY(edit_patch_relocates_unique_stale_hunk),
 };
 
 RUN_ALL_TESTS()

@@ -23,7 +23,8 @@
  * after stripping, absolute paths, ".." components and paths above the
  * workspace are rejected. (The check is lexical; the sandbox remains the
  * backstop for symlink tricks inside the workspace.) Hunks must apply
- * exactly at their stated position — no fuzz. All hunks are applied to
+ * first at their stated position, then at a unique matching offset when
+ * surrounding edits shifted the line numbers. All hunks are applied to
  * in-memory copies first; files are only written when every hunk
  * applied, and a failed write triggers a best-effort restore of the
  * files already written (all-or-nothing).
@@ -769,6 +770,54 @@ static void mkdirs_parent(const char *abs) {
   free(tmp);
 }
 
+/* Return true when every old-side line in h matches at start. Added lines
+ * consume no input. The parser has already checked the old/new line counts,
+ * so this is also the predicate used to relocate a stale hunk header. */
+static int hunk_matches_at(const ptgt *t, const espan *sp, size_t nlines,
+                           char **plines, const phunk *h, size_t start) {
+  size_t at = start, j;
+  if (start > nlines || (size_t)h->b > nlines - start) return 0;
+  for (j = 0; j < h->body_len; j++) {
+    const char *bl = plines[h->body_start + j];
+    char kind = bl[0] == '\0' ? ' ' : bl[0];
+    const char *text;
+    size_t len;
+    if (kind == '\\' || kind == '+') continue;
+    if (kind != ' ' && kind != '-') return 0;
+    text = bl[0] == '\0' ? bl : bl + 1;
+    len = strlen(text);
+    if (at >= nlines || sp[at].len != len ||
+        (len > 0 && memcmp(t->cur + sp[at].off, text, len) != 0))
+      return 0;
+    at++;
+  }
+  return 1;
+}
+
+/* Unified diffs generated from a slightly older view commonly carry stale
+ * line numbers. Accept that standard offset behavior only when the old-side
+ * text identifies exactly one location; ambiguity remains a hard failure. */
+static int relocate_hunk(const ptgt *t, const espan *sp, size_t nlines,
+                         char **plines, const phunk *h, size_t old_idx,
+                         size_t declared, size_t *resolved) {
+  size_t at, found = 0, matches = 0;
+  if (declared >= old_idx &&
+      hunk_matches_at(t, sp, nlines, plines, h, declared)) {
+    *resolved = declared;
+    return 0;
+  }
+  if (h->b == 0) return -1; /* an insertion has no context to relocate */
+  for (at = old_idx; at <= nlines; at++) {
+    if (!hunk_matches_at(t, sp, nlines, plines, h, at)) continue;
+    found = at;
+    matches++;
+    if (matches > 1) return -2;
+  }
+  if (matches != 1) return -1;
+  *resolved = found;
+  return 0;
+}
+
 /* Apply one file section's hunks to t->cur. Returns 0 on success; on
  * failure writes a message and returns -1. hunk_no counts globally. */
 static int apply_section(ptgt *t, char **plines, const phunk *hs, size_t nh,
@@ -812,6 +861,7 @@ static int apply_section(ptgt *t, char **plines, const phunk *hs, size_t nh,
   for (i = 0; i < nh; i++) {
     const phunk *h = &hs[i];
     size_t start;
+    int relocated;
     char prev_kind = 0;
     (*hunk_no)++;
     if (h->b > 0) {
@@ -824,8 +874,13 @@ static int apply_section(ptgt *t, char **plines, const phunk *hs, size_t nh,
     } else {
       start = (size_t)h->a; /* pure insertion goes after old line a */
     }
-    if (start < old_idx || start > nlines) {
-      snprintf(emsg, emsg_sz, "hunk #%lld does not apply",
+    relocated = relocate_hunk(t, sp, nlines, plines, h, old_idx, start,
+                              &start);
+    if (relocated != 0) {
+      snprintf(emsg, emsg_sz,
+               relocated == -2
+                   ? "hunk #%lld is ambiguous at the declared offset"
+                   : "hunk #%lld does not apply",
                (long long)*hunk_no);
       goto bad;
     }
