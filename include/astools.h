@@ -108,6 +108,11 @@ astools_err astools_catalog(astools_ctx *c, astools_catalog_level level,
  * of the current registry. */
 astools_err astools_grammar_export(astools_ctx *c, char **out_gbnf);
 
+/* Resolved enabled commands as JSON [{tool, arguments}], where arguments is
+ * the same JSON Schema used by MCP. Registry order matches grammar export.
+ * This describes availability; argument-dependent host policy still applies. */
+astools_err astools_command_schemas(astools_ctx *c, char **out_json);
+
 /* First call line in model output; ASTOOLS_ERR_NOT_FOUND if none. */
 astools_err astools_call_parse(astools_ctx *c, const char *model_output,
                                char **out_ref, char **out_command,

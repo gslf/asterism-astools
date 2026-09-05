@@ -96,6 +96,8 @@ set(ASTOOLS_SOURCES
   src/invoke.c
   src/worker.c
   src/catalog.c
+  src/selection.c
+  src/command_schema.c
   src/gbnf.c
   src/callline.c
   src/jscm.c

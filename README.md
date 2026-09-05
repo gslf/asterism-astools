@@ -81,3 +81,9 @@ scoped to that tool and does not enable the arbitrary `proc.run` escape hatch.
 
 ## License
 MIT [LICENSE](LICENSE).
+
+
+`astools_command_schemas` exports resolved enabled commands and their input JSON
+Schemas from the same typed manifests used by MCP. Catalog, GBNF and this export
+share one registry selector. Exported availability does not bypass the host's
+argument-dependent invocation policy.

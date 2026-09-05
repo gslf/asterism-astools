@@ -690,6 +690,9 @@ struct astools_task {
 
 /* ═══════════════════════ catalog.c / gbnf.c / callline.c ═══════════ */
 
+/* Caller holds the registry read lock; returned array is caller-owned. */
+astools_err astools_collect_tools(astools_ctx *c, astools_tool ***out, size_t *n);
+
 astools_err astools_catalog_render(astools_ctx *c, astools_catalog_level lvl,
                                    size_t char_budget, char **out);
 astools_err astools_gbnf_render(astools_ctx *c, char **out);

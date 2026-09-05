@@ -182,7 +182,25 @@ TEST(disabled_tool_never_renders) {
   cat_drop(&f);
 }
 
+TEST(command_contracts_follow_enabled_registry) {
+  cat_fx f;
+  char *schema = NULL;
+  ASSERT_TRUE(cat_setup(&f, NULL));
+  ASSERT_OK(astools_command_schemas(f.c, &schema));
+  ASSERT_TRUE(strstr(schema, "\"tool\":\"aaa.") != NULL);
+  ASSERT_TRUE(strstr(schema, "\"tool\":\"zzz.") != NULL);
+  ASSERT_TRUE(strstr(schema, "\"arguments\":{\"type\":\"object\"") != NULL);
+  astools_free(schema); schema = NULL;
+  ASSERT_OK(astools_tool_enable(f.c, "zzz", 0));
+  ASSERT_OK(astools_command_schemas(f.c, &schema));
+  ASSERT_TRUE(strstr(schema, "zzz.") == NULL);
+  ASSERT_TRUE(strstr(schema, "aaa.") != NULL);
+  astools_free(schema);
+  cat_drop(&f);
+}
+
 TEST_LIST = {
+  TEST_ENTRY(command_contracts_follow_enabled_registry),
   TEST_ENTRY(deterministic_byte_identical),
   TEST_ENTRY(ordering_by_id_ascending),
   TEST_ENTRY(priority_override_reorders),
