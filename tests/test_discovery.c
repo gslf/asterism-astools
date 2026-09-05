@@ -47,12 +47,14 @@ TEST(selection_is_consistent_and_revalidated) {
   astools_result result;
   ASSERT_EQ_INT(astools_selection_invoke(s, "aaa.run", "{msg:\"no\"}", 100, &result),
                 ASTOOLS_ERR_DENIED);
+  astools_result_free(&result);
   ASSERT_OK(astools_selection_validate(s, "zzz.run", "{msg:\"no\"}"));
   ASSERT_EQ_INT(astools_selection_validate(s, "aaa.run", "{}"), ASTOOLS_ERR_DENIED);
   ASSERT_OK(astools_tool_enable(f.ctx, "zzz", 0));
   ASSERT_EQ_INT(astools_selection_validate(s, "zzz.run", "{msg:\"no\"}"), ASTOOLS_ERR_DENIED);
   ASSERT_EQ_INT(astools_selection_invoke(s, "zzz.run", "{msg:\"no\"}", 100, &result),
                 ASTOOLS_ERR_DENIED);
+  astools_result_free(&result);
   ASSERT_OK(astools_discover(f.ctx, &o, &next));
   ASSERT_TRUE(astools_selection_revision(next) > revision);
   ASSERT_TRUE(!strcmp(astools_selection_get(next, 0)->tool, "aaa.run"));
@@ -68,6 +70,7 @@ TEST(selection_is_consistent_and_revalidated) {
   ASSERT_EQ_INT(astools_selection_validate(s, "zzz.run", "{msg:\"no\"}"), ASTOOLS_ERR_DENIED);
   ASSERT_EQ_INT(astools_selection_invoke(s, "zzz.run", "{msg:\"no\"}", 100, &result),
                 ASTOOLS_ERR_DENIED);
+  astools_result_free(&result);
   ASSERT_TRUE(strstr(astools_last_error(f.ctx), "changed after selection"));
   astools_selection_free(s);
   drop(&f);

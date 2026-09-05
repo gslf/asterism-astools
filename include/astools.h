@@ -182,7 +182,9 @@ astools_err astools_validate_args(astools_ctx *c, const char *ref,
                                   const char *command,
                                   const char *args_xcdn);
 
-/* Blocking invocation; deadline_ms = 0 -> command/config default. */
+/* Blocking invocation; deadline_ms = 0 -> command/config default.
+ * Free result strings after any verdict, including failures before dispatch.
+ * Request diagnostics are returned in result, including across async waits. */
 astools_err astools_invoke(astools_ctx *c, const char *ref,
                            const char *command, const char *args_xcdn,
                            uint32_t deadline_ms, astools_result *out);

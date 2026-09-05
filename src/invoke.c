@@ -40,6 +40,13 @@ static const char *mode_name(const astools_manifest *m) {
 /* Reserved code for engine verdicts that reached dispatch (audit trail). */
 static const char *engine_code(astools_err e) {
   switch (e) {
+    case ASTOOLS_ERR_NOT_FOUND: return "astools/not-found";
+    case ASTOOLS_ERR_IO: return "astools/io";
+    case ASTOOLS_ERR_PARSE: return "astools/parse";
+    case ASTOOLS_ERR_CONFIG: return "astools/config";
+    case ASTOOLS_ERR_NOMEM: return "astools/no-memory";
+    case ASTOOLS_ERR_BUSY: return "astools/busy";
+    case ASTOOLS_ERR_UNSUPPORTED: return "astools/unsupported";
     case ASTOOLS_ERR_DENIED: return "astools/denied";
     case ASTOOLS_ERR_TIMEOUT: return "astools/timeout";
     case ASTOOLS_ERR_CANCELLED: return "astools/cancelled";
@@ -47,6 +54,19 @@ static const char *engine_code(astools_err e) {
     case ASTOOLS_ERR_TOOL: return "astools/tool-crashed";
     case ASTOOLS_ERR_INVALID: return "astools/invalid-args";
     default: return astools_err_name(e);
+  }
+}
+
+static void result_error(astools_ctx *c, astools_err e, astools_result *r) {
+  /* Diagnostic ownership crosses the asynchronous thread boundary with the
+   * result. A context's last-error slot is never a per-invocation receipt. */
+  if (e != ASTOOLS_OK) {
+    r->ok = 0;
+    if (!r->error_code) r->error_code = astools_strdup(engine_code(e));
+    if (!r->error_message) {
+      const char *detail = astools_last_error(c);
+      r->error_message = astools_strdup(detail && *detail ? detail : astools_err_name(e));
+    }
   }
 }
 
@@ -202,6 +222,7 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
   memset(&setup, 0, sizeof setup);
   id[0] = '\0';
   t0 = astools_mono(c);
+  (void)astools_seterr(c,ASTOOLS_OK,"%s","");
 
   /* 1. resolve ref, find command. */
   e = astools_registry_resolve(c, ref, &t);
@@ -236,6 +257,7 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
       if (e == ASTOOLS_ERR_DENIED) {
         e = astools_seterr(c, ASTOOLS_ERR_DENIED, "%s",
                            deny ? deny : "denied by policy");
+        result_error(c,e,out);
         astools_log(c, ASTOOLS_LOG_WARN, "invoke", "deny %s.%s: %s",
                     t->m->id, command, deny ? deny : "denied by policy");
       }
@@ -346,6 +368,7 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
   }
 
 done:
+  result_error(c,e,out);
   /* 7. counters, audit, log. Reached once the ref resolved to a tool `t`
    * (cmd/args may be absent on a post-resolve validation failure), so every
    * attempted invocation of a real tool is counted and audited —
@@ -415,6 +438,7 @@ done:
   goto cleanup;
 
 cleanup_early:
+  result_error(c,e,out);
   out->duration_ms = (uint64_t)(astools_mono(c) - t0);
 cleanup:
   keep_scratch =

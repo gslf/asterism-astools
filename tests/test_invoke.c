@@ -582,7 +582,29 @@ TEST(selection_rechecked_after_queue_and_cancellable) {
 #endif
 }
 
+TEST(asynchronous_diagnostics_belong_to_the_result) {
+#ifndef ASTOOLS_NO_THREADS
+  inv_fx f; ASSERT_TRUE(inv_setup(&f));
+  astools_task *missing = NULL, *invalid = NULL;
+  astools_result first = {0}, second = {0};
+  ASSERT_OK(astools_invoke_async(f.c,"absent-diagnostic","run","{}",1000,&missing));
+  ASSERT_OK(astools_invoke_async(f.c,"fk","run","{msg:3}",1000,&invalid));
+  ASSERT_ERR(astools_task_wait(missing,2000,&first),ASTOOLS_ERR_NOT_FOUND);
+  ASSERT_ERR(astools_task_wait(invalid,2000,&second),ASTOOLS_ERR_INVALID);
+  ASSERT_TRUE(astools_task_done(missing) && astools_task_done(invalid));
+  ASSERT_TRUE(first.error_code && !strcmp(first.error_code,"astools/not-found"));
+  ASSERT_TRUE(first.error_message && strstr(first.error_message,"absent-diagnostic"));
+  ASSERT_TRUE(second.error_message && strstr(second.error_message,"msg"));
+  /* A subsequent diagnostic on the caller's thread cannot replace either. */
+  ASSERT_ERR(astools_validate_args(f.c,"fk","run","{wrong:1}"),ASTOOLS_ERR_INVALID);
+  ASSERT_TRUE(strstr(first.error_message,"absent-diagnostic") && strstr(second.error_message,"msg"));
+  astools_result_free(&first); astools_result_free(&second);
+  astools_task_free(missing); astools_task_free(invalid); inv_drop(&f);
+#endif
+}
+
 TEST_LIST = {
+  TEST_ENTRY(asynchronous_diagnostics_belong_to_the_result),
   TEST_ENTRY(selection_rechecked_after_queue_and_cancellable),
   TEST_ENTRY(selected_invocation_uses_existing_pipeline),
   TEST_ENTRY(echo_canonical_path_and_default),
