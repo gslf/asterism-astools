@@ -71,6 +71,9 @@ int astd_arr_push_val(xcdn_value_t *arr, xcdn_value_t *v /*owned*/);
 /* Format unix seconds as RFC 3339 UTC into out[32]. */
 void astd_rfc3339(int64_t unix_s, char out[32]);
 
+void astd_version(const void *data, size_t n, char out[65]);
+int astd_version_matches(const char *path, const char *expected);
+
 /* Base64 (RFC 4648, no wrap). Encode returns malloc'd NUL-terminated;
  * decode returns 0 on success with a malloc'd buffer. */
 char *astd_base64_encode(const uint8_t *data, size_t len);

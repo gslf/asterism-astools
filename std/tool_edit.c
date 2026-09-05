@@ -166,8 +166,24 @@ static char *denorm(const char *s, size_t n, int crlf, size_t *out_n) {
   return buf;
 }
 
+static int version_current(const char *path, const char *expected) {
+  struct stat st;
+  if (!strcmp(expected, "absent"))
+    return lstat(path, &st) != 0 && errno == ENOENT;
+  return astd_version_matches(path, expected);
+}
+
+static int expected_version(astd_req *r, const char *raw, size_t n,
+                            char version[65]) {
+  const char *expected = astd_arg_str(r, "expected_sha256", NULL);
+  astd_version(raw, n, version);
+  if (!expected || !strcmp(expected, version)) return 1;
+  astd_fail(r, "edit/conflict", "content changed; reopen the file before editing");
+  return 0;
+}
+
 static int write_atomic(const char *path, const char *data, size_t n,
-                        mode_t mode, char *emsg, size_t emsg_sz) {
+                        mode_t mode, const char *expected, char *emsg, size_t emsg_sz) {
   size_t pl = strlen(path);
   char *tmp = malloc(pl + 32);
   int fd;
@@ -201,6 +217,12 @@ static int write_atomic(const char *path, const char *data, size_t n,
     unlink(tmp);
     free(tmp);
     return -1;
+  }
+  /* Detect conflicting writers immediately before replacement. This is an
+   * optimistic check, not an OS compare-and-swap against an arbitrary editor. */
+  if (expected && !version_current(path, expected)) {
+    snprintf(emsg, emsg_sz, "version conflict for '%s'; reopen the file", path);
+    unlink(tmp); free(tmp); return -1;
   }
   if (rename(tmp, path) != 0) {
     snprintf(emsg, emsg_sz, "cannot replace '%s': %s", path, strerror(errno));
@@ -337,7 +359,7 @@ static void cmd_replace(astd_req *r) {
   const char *rep = astd_arg_str(r, "replace_with", "");
   int all = astd_arg_bool(r, "all", 0);
   int use_re = astd_arg_bool(r, "regex", 0);
-  char emsg[512];
+  char emsg[512], version[65];
   char *raw = NULL, *norm = NULL, *outraw = NULL;
   size_t rawn = 0, nn = 0, outn = 0, flen, rl;
   mode_t mode = 0644;
@@ -358,6 +380,7 @@ static void cmd_replace(astd_req *r) {
     astd_fail(r, "edit/io", "%s", emsg);
     return;
   }
+  if (!expected_version(r, raw, rawn, version)) { free(raw); return; }
   if (astd_looks_binary(raw, rawn)) {
     free(raw);
     astd_fail(r, "edit/binary", "'%s' looks binary (NUL in first 4KiB)",
@@ -449,7 +472,7 @@ static void cmd_replace(astd_req *r) {
     astd_fail(r, "edit/io", "out of memory");
     return;
   }
-  if (write_atomic(path, outraw, outn, mode, emsg, sizeof emsg) != 0) {
+  if (write_atomic(path, outraw, outn, mode, version, emsg, sizeof emsg) != 0) {
     free(outraw);
     astd_fail(r, "edit/io", "%s", emsg);
     return;
@@ -458,7 +481,8 @@ static void cmd_replace(astd_req *r) {
   {
     xcdn_value_t *res = xcdn_value_object();
     if (!res || astd_set_int(res, "replacements", total) != 0 ||
-        astd_set_int(res, "size", (int64_t)outn) != 0) {
+        astd_set_int(res, "size", (int64_t)outn) != 0 ||
+        astd_set_str(res, "path", path) != 0) {
       if (res) xcdn_value_free(res);
       astd_fail(r, "edit/io", "out of memory");
       return;
@@ -473,7 +497,7 @@ static void cmd_insert(astd_req *r) {
   const char *path = astd_arg_str(r, "path", NULL);
   const char *content = astd_arg_str(r, "content", NULL);
   int64_t line = astd_arg_int(r, "line", 0);
-  char emsg[512];
+  char emsg[512], version[65];
   char *raw = NULL, *norm = NULL, *cnorm = NULL, *outraw = NULL;
   size_t rawn = 0, nn = 0, cn = 0, outn = 0;
   mode_t mode = 0644;
@@ -494,6 +518,7 @@ static void cmd_insert(astd_req *r) {
     astd_fail(r, "edit/io", "%s", emsg);
     return;
   }
+  if (!expected_version(r, raw, rawn, version)) { free(raw); return; }
   if (astd_looks_binary(raw, rawn)) {
     free(raw);
     astd_fail(r, "edit/binary", "'%s' looks binary (NUL in first 4KiB)",
@@ -538,7 +563,7 @@ static void cmd_insert(astd_req *r) {
   free(cnorm);
   free(ls);
   free(cs);
-  if (write_atomic(path, outraw, outn, mode, emsg, sizeof emsg) != 0) {
+  if (write_atomic(path, outraw, outn, mode, version, emsg, sizeof emsg) != 0) {
     free(outraw);
     astd_fail(r, "edit/io", "%s", emsg);
     return;
@@ -546,7 +571,8 @@ static void cmd_insert(astd_req *r) {
   free(outraw);
   {
     xcdn_value_t *res = xcdn_value_object();
-    if (!res || astd_set_int(res, "size", (int64_t)outn) != 0) {
+    if (!res || astd_set_int(res, "size", (int64_t)outn) != 0 ||
+        astd_set_str(res, "path", path) != 0) {
       if (res) xcdn_value_free(res);
       astd_fail(r, "edit/io", "out of memory");
       return;
@@ -581,6 +607,7 @@ typedef struct {
   int is_delete;
   int no_final_nl;
   mode_t mode;
+  char base_version[65], written_version[65];
   int written;
   int64_t hunks;
 } ptgt;
@@ -977,6 +1004,7 @@ static const char *patch_error_code(const astd_req *r, const char *code) {
   if (!r->tool || strcmp(r->tool, "code") != 0) return code;
   if (code && strcmp(code, "edit/binary") == 0) return "code/binary";
   if (code && strcmp(code, "edit/io") == 0) return "code/io";
+  if (code && strcmp(code, "edit/conflict") == 0) return "code/conflict";
   return "code/patch-failed";
 }
 
@@ -1181,6 +1209,8 @@ static void cmd_patch(astd_req *r) {
           }
           t->existed = 1;
         }
+        if (t->existed) astd_version(t->raw_orig, t->raw_orig_n, t->base_version);
+        else strcpy(t->base_version, "absent");
         ntg++;
       } else {
         free(abs);
@@ -1255,16 +1285,41 @@ static void cmd_patch(astd_req *r) {
     snprintf(emsg, sizeof emsg, "no '---' / '+++' file headers found");
     goto fail;
   }
+  {
+    const xcdn_value_t *expected = astd_arg(r, "expected");
+    if (expected && (expected->type != XCDN_VAL_ARRAY || xcdn_array_len(expected) != ntg)) {
+      fail_code = "edit/conflict";
+      snprintf(emsg, sizeof emsg, "expected versions must cover every patch target exactly once");
+      goto fail;
+    }
+    for (i = 0; i < ntg; i++) {
+      size_t j, matches = 0;
+      if (expected) for (j = 0; j < xcdn_array_len(expected); j++) {
+        const xcdn_value_t *item = xcdn_array_get(expected, j)->value;
+        const xcdn_node_t *pn = xcdn_object_get(item, "path");
+        const xcdn_node_t *vn = xcdn_object_get(item, "sha256");
+        if (pn && vn && pn->value->type == XCDN_VAL_STRING && vn->value->type == XCDN_VAL_STRING &&
+            !strcmp(pn->value->data.string, tg[i].abs) &&
+            !strcmp(vn->value->data.string, tg[i].base_version)) matches++;
+      }
+      if ((expected && matches != 1) || !version_current(tg[i].abs, tg[i].base_version)) {
+        fail_code = "edit/conflict";
+        snprintf(emsg, sizeof emsg, "version conflict for '%s'; reopen the file", tg[i].abs);
+        goto fail;
+      }
+    }
+  }
   /* every hunk applied in memory: write everything out */
   for (i = 0; i < ntg; i++) {
     ptgt *t = &tg[i];
     if (t->is_delete) {
-      if (unlink(t->abs) != 0) {
+      if (!version_current(t->abs, t->base_version) || unlink(t->abs) != 0) {
         fail_code = "edit/io";
         snprintf(emsg, sizeof emsg, "cannot remove '%s': %s", t->abs,
                  strerror(errno));
         goto rollback;
       }
+      strcpy(t->written_version, "absent");
       t->written = 1;
     } else {
       char *rawout;
@@ -1277,13 +1332,14 @@ static void cmd_patch(astd_req *r) {
         goto rollback;
       }
       if (!t->existed) mkdirs_parent(t->abs);
-      if (write_atomic(t->abs, rawout, rawn, t->mode, wmsg, sizeof wmsg) !=
+      if (write_atomic(t->abs, rawout, rawn, t->mode, t->base_version, wmsg, sizeof wmsg) !=
           0) {
         free(rawout);
         fail_code = "edit/io";
         snprintf(emsg, sizeof emsg, "%s", wmsg);
         goto rollback;
       }
+      astd_version(rawout, rawn, t->written_version);
       free(rawout);
       t->written = 1;
     }
@@ -1294,6 +1350,18 @@ static void cmd_patch(astd_req *r) {
     xcdn_value_t *res = xcdn_value_object();
     int rc = 0;
     if (res) {
+      xcdn_value_t *files = xcdn_value_array();
+      for (i = 0; files && i < ntg; i++) {
+        xcdn_value_t *file = xcdn_value_object();
+        if (!file || astd_set_str(file, "path", tg[i].abs) ||
+            astd_set_str(file, "before_sha256", tg[i].base_version) ||
+            astd_set_str(file, "after_sha256", tg[i].written_version)) {
+          xcdn_value_free(file); rc = -1; break;
+        }
+        rc |= astd_arr_push_val(files, file);
+      }
+      if (!files) rc = -1;
+      else rc |= astd_set_val(res, "files", files);
       rc |= astd_set_int(res, "files_changed", (int64_t)ntg);
       rc |= astd_set_int(res, "hunks_applied", hunks_applied);
     }
@@ -1323,9 +1391,9 @@ rollback:
   for (i = 0; i < ntg; i++) {
     ptgt *t = &tg[i];
     char wmsg[64];
-    if (!t->written) continue;
+    if (!t->written || !version_current(t->abs, t->written_version)) continue;
     if (t->existed && t->raw_orig) {
-      (void)write_atomic(t->abs, t->raw_orig, t->raw_orig_n, t->mode, wmsg,
+      (void)write_atomic(t->abs, t->raw_orig, t->raw_orig_n, t->mode, t->written_version, wmsg,
                          sizeof wmsg);
     } else if (!t->existed) {
       (void)unlink(t->abs);

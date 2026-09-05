@@ -3,6 +3,7 @@
 #include "astools_test.h"
 
 #include "astools.h"
+#include "xcdn.h"
 
 #ifndef ASTOOLS_STD_PACKAGES
 #define ASTOOLS_STD_PACKAGES "packages"
@@ -171,7 +172,87 @@ TEST(edit_patch_relocates_unique_stale_hunk) {
   astools_test_rmtree(ws);
 }
 
+TEST(edits_reject_stale_versions) {
+  char ws[256], path[512], hash[65], args[1024];
+  const char *roots[] = {ASTOOLS_STD_PACKAGES, NULL};
+  astools_open_params op = {0};
+  astools_ctx *c = NULL;
+  astools_result r = {0};
+  xcdn_document_t *doc;
+  const xcdn_node_t *node;
+  ASSERT_TRUE(astools_test_tmpdir(ws));
+  snprintf(path, sizeof path, "%s/target.c", ws);
+  ASSERT_TRUE(write_text(path, "int x = 1;\n"));
+  op.registry_paths = roots; op.workspace_root = ws;
+  ASSERT_OK(astools_open(&op, &c));
+  ASSERT_OK(astools_invoke(c, "code", "read-range", "{path:\"target.c\"}", 0, &r));
+  ASSERT_EQ_INT(r.ok, 1);
+  doc = xcdn_parse(r.result_xcdn, NULL);
+  ASSERT_TRUE(doc && doc->values_len == 1);
+  node = xcdn_object_get(doc->values[0]->value, "sha256");
+  ASSERT_TRUE(node && node->value->type == XCDN_VAL_STRING);
+  snprintf(hash, sizeof hash, "%s", node->value->data.string);
+  xcdn_document_free(doc); astools_result_free(&r);
+  /* The target text still occurs exactly once, but its dependency changed. */
+  ASSERT_TRUE(write_text(path, "// external edit\nint x = 1;\n"));
+  snprintf(args, sizeof args, "{path:\"target.c\", find:\"int x = 1;\","
+           "replace_with:\"int x = 2;\", expected_sha256:\"%s\"}", hash);
+  ASSERT_OK(astools_invoke(c, "edit", "replace", args, 0, &r));
+  ASSERT_EQ_INT(r.ok, 0);
+  ASSERT_EQ_STR(r.error_code, "edit/conflict");
+  astools_result_free(&r);
+  ASSERT_TRUE(write_text(path, "int x = 1;\n"));
+  snprintf(args, sizeof args, "{expected:[{path:\"target.c\",sha256:\"%s\"}],"
+      "patch:\"--- a/target.c\\n+++ b/target.c\\n@@ -1 +1 @@\\n-int x = 1;\\n+int x = 2;\\n\"}", hash);
+  /* The patch string above is xCDN-escaped, as a caller would send it. */
+  ASSERT_OK(astools_invoke(c, "code", "apply-patch", args, 0, &r));
+  ASSERT_EQ_INT(r.ok, 1);
+  ASSERT_TRUE(strstr(r.result_xcdn, "after_sha256") != NULL);
+  astools_result_free(&r);
+  ASSERT_OK(astools_invoke(c, "code", "apply-patch", args, 0, &r));
+  ASSERT_EQ_INT(r.ok, 0);
+  astools_result_free(&r);
+  astools_close(c); astools_test_rmtree(ws);
+}
+
+TEST(project_test_reports_real_collection) {
+  char ws[256], path[512], config_path[512], config[2048];
+  astools_open_params op = {0};
+  astools_ctx *c = NULL;
+  astools_result r = {0};
+  const char *variants[] = {
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true)\n",
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true)\nset_tests_properties(ok PROPERTIES DISABLED TRUE)\n",
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\n"
+  };
+  size_t i;
+  ASSERT_TRUE(astools_test_tmpdir(ws));
+  for (i = 0; ws[i]; i++) if (ws[i] == '\\') ws[i] = '/';
+  snprintf(path, sizeof path, "%s/CMakeLists.txt", ws);
+  snprintf(config_path, sizeof config_path, "%s/grant.xcdn", ws);
+  snprintf(config, sizeof config,
+      "#astools_config {registry:{paths:[{path:\"%s\",trust:\"standard\"}],watch:\"off\",pinning:\"off\"},"
+      "workspace:{root:\"%s\"},grants:{workspace_access:\"read-write\",tools:[{tool:\"project\",proc:true}]}}",
+      ASTOOLS_STD_PACKAGES, ws);
+  ASSERT_TRUE(write_text(config_path, config));
+  op.config_path = config_path;
+  ASSERT_OK(astools_open(&op, &c));
+  for (i = 0; i < 3; i++) {
+    ASSERT_TRUE(write_text(path, variants[i]));
+    ASSERT_OK(astools_invoke(c, "project", "test", "{}", 0, &r));
+    ASSERT_EQ_INT(r.ok, 1);
+    ASSERT_TRUE(r.result_xcdn != NULL);
+    if (i == 0 && !strstr(r.result_xcdn, "\"passed\"")) fprintf(stderr, "%s\n", r.result_xcdn);
+    if (i == 0) ASSERT_TRUE(strstr(r.result_xcdn, "\"passed\"") != NULL);
+    else ASSERT_TRUE(strstr(r.result_xcdn, "\"passed\"") == NULL);
+    astools_result_free(&r);
+  }
+  astools_close(c); astools_test_rmtree(ws);
+}
+
 TEST_LIST = {
+  TEST_ENTRY(edits_reject_stale_versions),
+  TEST_ENTRY(project_test_reports_real_collection),
   TEST_ENTRY(code_commands_and_proc_isolation),
   TEST_ENTRY(edit_patch_relocates_unique_stale_hunk),
 };

@@ -57,6 +57,8 @@
       """,
       annotations: { destructive: true },
       params: [
+        #param { name: "expected_sha256", type: #type { kind: "string", min_len: 64, max_len: 64 },
+          description: "SHA-256 of the original bytes returned by code.read-range. A mismatch refuses the edit." },
         #param {
           name: "path",
           type: #type { kind: "path", access: "read-write",
@@ -129,6 +131,8 @@
       """,
       annotations: { destructive: true },
       params: [
+        #param { name: "expected_sha256", type: #type { kind: "string", min_len: 64, max_len: 64 },
+          description: "SHA-256 of the original bytes returned by code.read-range. A mismatch refuses the edit." },
         #param {
           name: "path",
           type: #type { kind: "path", access: "read-write",
@@ -184,6 +188,12 @@
       """,
       annotations: { destructive: true },
       params: [
+        #param { name: "expected", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "path", type: #type { kind: "path", access: "read-write" }, required: true,
+            description: "Workspace-relative target path." },
+          #param { name: "sha256", type: #type { kind: "string" }, required: true,
+            description: "Original SHA-256, or absent for a new file." },
+        ] } }, description: "If present, must cover every target exactly once. Conflicting versions refuse the entire patch." },
         #param {
           name: "patch",
           type: #type { kind: "string", min_len: 1 },
@@ -199,6 +209,11 @@
       ],
       returns: {
         type: #type { kind: "object", fields: [
+        #param { name: "files", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "path", type: #type { kind: "string" }, required: true, description: "Changed file." },
+          #param { name: "before_sha256", type: #type { kind: "string" }, required: true, description: "Original version or absent." },
+          #param { name: "after_sha256", type: #type { kind: "string" }, required: true, description: "Written version or absent." },
+        ] } }, description: "Actual changed files and content versions." },
           #param { name: "files_changed", type: #type { kind: "integer" },
                    required: true,
                    description: "Files modified by the patch." },

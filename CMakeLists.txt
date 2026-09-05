@@ -82,6 +82,7 @@ set(ASTOOLS_SOURCES
   src/time.c
   src/uuid.c
   src/sha256.c
+  src/hash_file.c
   src/log.c
   src/types.c
   src/manifest.c
@@ -158,6 +159,8 @@ endif()
 if(ASTOOLS_BUILD_STD)
   set(ASTOOLS_STD_SOURCES
     std/main.c
+    src/sha256.c
+    std/version.c
     std/sdk.c
     std/regex.c
     std/tool_fs.c
@@ -169,6 +172,7 @@ if(ASTOOLS_BUILD_STD)
     std/tool_git.c
     std/tool_code.c
     std/tool_project.c
+    std/project_receipt.c
   )
   if(WIN32)
     list(APPEND ASTOOLS_STD_SOURCES std/compat_win32.c)
@@ -177,6 +181,7 @@ if(ASTOOLS_BUILD_STD)
     list(APPEND ASTOOLS_STD_SOURCES std/tool_net.c)
   endif()
   add_executable(astools-std ${ASTOOLS_STD_SOURCES})
+  target_include_directories(astools-std PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_include_directories(astools-std PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/deps/xcdn-c/src
     ${CMAKE_CURRENT_SOURCE_DIR}/std)

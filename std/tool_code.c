@@ -43,6 +43,7 @@ static void cmd_read_range(astd_req *r) {
   int64_t line = 1, total = 0, actual_end;
   xcdn_value_t *res = NULL;
   int rc = 0;
+  char version[65];
 
   if (!path) {
     astd_fail(r, "astools/invalid-args", "path is required");
@@ -115,6 +116,8 @@ static void cmd_read_range(astd_req *r) {
   res = xcdn_value_object();
   if (!res) goto oom;
   rc |= astd_set_str(res, "content", content);
+  astd_version(buf, n, version);
+  rc |= astd_set_str(res, "sha256", version);
   rc |= astd_set_int(res, "start_line", start);
   rc |= astd_set_int(res, "end_line", actual_end);
   rc |= astd_set_int(res, "total_lines", total);

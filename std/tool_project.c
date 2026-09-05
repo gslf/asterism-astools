@@ -13,6 +13,7 @@
 #endif
 
 #include "sdk.h"
+#include "project_receipt.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -124,6 +125,7 @@ static size_t cmake_steps(const char *action, project_step *s) {
     s[2].argv[1] = "--test-dir";
     s[2].argv[2] = "build";
     s[2].argv[3] = "--output-on-failure";
+    s[2].argv[4] = "--no-tests=error";
     return 3;
   }
   s[1].argv[0] = "cmake";
@@ -164,7 +166,6 @@ static size_t npm_steps(const char *action, project_step *s) {
     s[0].argv[1] = "run";
     s[0].argv[2] = strcmp(action, "diagnostics") == 0 ? "typecheck" :
                                                         (char *)action;
-    s[0].argv[3] = "--if-present";
   }
   return 1;
 }
@@ -200,6 +201,9 @@ static void run_action(astd_req *r, const char *action) {
   size_t nsteps = 0, i;
   xcdn_value_t *step_values = NULL, *res = NULL;
   int exit_code = 0, rc = 0;
+  bool truncated = false;
+  char *report = NULL;
+  long collected = -1, skipped = -1, failed = -1;
 
   if (!cwd || strcmp(cwd, ".") == 0)
     cwd = r->workspace ? r->workspace : ".";
@@ -223,6 +227,18 @@ static void run_action(astd_req *r, const char *action) {
     return;
   }
 
+  if (!strcmp(action, "test") && r->scratch &&
+      (!strcmp(adapter, "cmake") || !strcmp(adapter, "python"))) {
+    report = path_join(r->scratch, "verification.xml");
+    if (!report) goto oom;
+    (void)remove(report);
+    if (!strcmp(adapter, "cmake")) {
+      steps[2].argv[5] = "--output-junit"; steps[2].argv[6] = report;
+    } else {
+      steps[0].argv[3] = "-o"; steps[0].argv[4] = "addopts=";
+      steps[0].argv[5] = "--junitxml"; steps[0].argv[6] = report;
+    }
+  }
   step_values = xcdn_value_array();
   if (!step_values) goto oom;
   for (i = 0; i < nsteps; i++) {
@@ -234,6 +250,7 @@ static void run_action(astd_req *r, const char *action) {
                          PROJECT_STREAM_CAP, PROJECT_STREAM_CAP, 0, &rr,
                          emsg, sizeof emsg) != 0) {
       xcdn_value_free(step_values);
+      free(report);
       astd_fail(r, "project/not-installed", "%s", emsg);
       return;
     }
@@ -245,6 +262,15 @@ static void run_action(astd_req *r, const char *action) {
     }
     rc = 0;
     rc |= astd_set_str(sv, "program", steps[i].argv[0]);
+    xcdn_value_t *argv = xcdn_value_array();
+    if (!argv) { xcdn_value_free(sv); free(rr.out); free(rr.err); goto oom; }
+    for (size_t j = 0; steps[i].argv[j]; j++)
+      if (astd_arr_push_val(argv, xcdn_value_string(steps[i].argv[j])) != 0) {
+        xcdn_value_free(argv); xcdn_value_free(sv);
+        free(rr.out); free(rr.err); goto oom;
+      }
+    rc |= astd_set_val(sv, "argv", argv);
+    truncated = truncated || rr.out_trunc || rr.err_trunc;
     rc |= astd_set_int(sv, "exit_code", rr.exit_code);
     rc |= astd_set_str(sv, "stdout", rr.out ? rr.out : "");
     rc |= astd_set_str(sv, "stderr", rr.err ? rr.err : "");
@@ -263,7 +289,31 @@ static void run_action(astd_req *r, const char *action) {
 
   res = xcdn_value_object();
   if (!res) goto oom;
-  if (astd_set_str(res, "adapter", adapter) != 0 ||
+  if (report) {
+    FILE *f = fopen(report, "rb");
+    char *xml = malloc(2 * 1024 * 1024 + 1);
+    if (f && xml) {
+      size_t n = fread(xml, 1, 2 * 1024 * 1024, f);
+      xml[n] = 0;
+      if (ferror(f) || n == 2 * 1024 * 1024 ||
+          astd_junit_counts(xml, &collected, &skipped, &failed) != 0)
+        collected = skipped = failed = -1;
+    }
+    if (f) fclose(f);
+    free(xml); (void)remove(report); free(report); report = NULL;
+  }
+  const char *status = exit_code != 0 || failed > 0 ? "failed" :
+      truncated ? "inconclusive" : !strcmp(action, "test") ?
+      (collected < 0 ? "inconclusive" : collected <= skipped ? "not_run" : "passed") : "passed";
+  if (astd_set_int(res, "verification_schema", 1) != 0 ||
+      astd_set_str(res, "verification_status", status) != 0 ||
+      astd_set_int(res, "tests_collected", collected) != 0 ||
+      astd_set_int(res, "tests_skipped", skipped) != 0 ||
+      astd_set_str(res, "action", action) != 0 ||
+      astd_set_str(res, "cwd", cwd) != 0 ||
+      astd_set_str(res, "test_collection", !strcmp(action, "test") ?
+          (collected >= 0 ? "junit-report" : "unknown") : "not-applicable") != 0 ||
+      astd_set_str(res, "adapter", adapter) != 0 ||
       astd_set_int(res, "exit_code", exit_code) != 0) {
     xcdn_value_free(step_values);
     xcdn_value_free(res);
@@ -280,6 +330,7 @@ static void run_action(astd_req *r, const char *action) {
   return;
 
 oom:
+  free(report);
   xcdn_value_free(step_values);
   xcdn_value_free(res);
   astd_fail(r, "project/failed", "out of memory");

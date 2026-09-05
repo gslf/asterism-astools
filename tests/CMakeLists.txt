@@ -19,6 +19,7 @@ set(ASTOOLS_TESTS
   test_regex
   test_jscm
   test_catalog
+  test_project_receipt
   test_sandbox
   test_invoke
   test_escape
@@ -125,3 +126,5 @@ if(ASTOOLS_BUILD_STD AND NOT WIN32)
   add_test(NAME test_std_containment COMMAND test_std_containment)
   set_tests_properties(test_std_containment PROPERTIES TIMEOUT 60)
 endif()
+
+target_sources(test_project_receipt PRIVATE ../std/project_receipt.c)

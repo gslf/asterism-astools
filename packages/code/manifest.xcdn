@@ -49,6 +49,8 @@
           default: 200, description: "Last line to return (inclusive)." },
       ],
       returns: { type: #type { kind: "object", fields: [
+        #param { name: "sha256", type: #type { kind: "string" },
+          description: "SHA-256 of the entire original file, for version preconditions." },
         #param { name: "content", type: #type { kind: "string" },
           required: true, description: "Selected source text." },
         #param { name: "start_line", type: #type { kind: "integer" },
@@ -79,7 +81,7 @@
       summary: "Find whole-identifier occurrences in source files.",
       description: """
         Accepts one identifier, not a regex. The tool constructs a bounded
-        whole-identifier search and returns matching lines in deterministic
+        whole-identifier text search (not AST or LSP resolution) and returns matching lines in deterministic
         file-walk order. Narrow path or glob when the result is truncated.
       """,
       annotations: { read_only: true, idempotent: true },
@@ -128,17 +130,28 @@
       summary: "Apply a unified source patch atomically.",
       description: """
         Applies a standard unified diff using workspace-relative paths. All
-        hunks succeed or every touched file is restored. This is the semantic
+        hunks are validated before writing; rollback is best effort and preserves external edits. This is the semantic
         coding alias for edit.patch; it never invokes a system patch program.
       """,
       annotations: { destructive: true },
       params: [
+        #param { name: "expected", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "path", type: #type { kind: "path", access: "read-write" }, required: true,
+            description: "Workspace-relative target path." },
+          #param { name: "sha256", type: #type { kind: "string" }, required: true,
+            description: "Original SHA-256, or absent for a new file." },
+        ] } }, description: "If present, must cover every target exactly once. Conflicting versions refuse the entire patch." },
         #param { name: "patch", type: #type { kind: "string", min_len: 1 },
           required: true, description: "Unified diff text." },
         #param { name: "strip", type: #type { kind: "integer", min: 0 },
           default: 1, description: "Leading path components to strip." },
       ],
       returns: { type: #type { kind: "object", fields: [
+        #param { name: "files", type: #type { kind: "array", item: #type { kind: "object", fields: [
+          #param { name: "path", type: #type { kind: "string" }, required: true, description: "Changed file." },
+          #param { name: "before_sha256", type: #type { kind: "string" }, required: true, description: "Original version or absent." },
+          #param { name: "after_sha256", type: #type { kind: "string" }, required: true, description: "Written version or absent." },
+        ] } }, description: "Actual changed files and content versions." },
         #param { name: "files_changed", type: #type { kind: "integer" }, required: true,
           description: "Files changed by the patch." },
         #param { name: "hunks_applied", type: #type { kind: "integer" }, required: true,
