@@ -95,8 +95,11 @@ set(ASTOOLS_SOURCES
   src/proto.c
   src/invoke.c
   src/worker.c
+  src/execution_queue.c
   src/catalog.c
   src/selection.c
+  src/discovery.c
+  src/discovery_view.c
   src/command_schema.c
   src/gbnf.c
   src/callline.c
@@ -140,6 +143,9 @@ if(WIN32)
 endif()
 
 foreach(tgt astools_static astools_shared)
+  if(ASTOOLS_NO_THREADS)
+    target_compile_definitions(${tgt} PUBLIC ASTOOLS_NO_THREADS)
+  endif()
   target_include_directories(${tgt} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(${tgt} PUBLIC xcdn)
   if(NOT WIN32 AND NOT ASTOOLS_NO_THREADS)

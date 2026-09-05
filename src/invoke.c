@@ -99,7 +99,7 @@ static astools_err cmd_not_found(astools_ctx *c, const astools_tool *t,
 
 astools_err astools_validate_impl(astools_ctx *c, const char *ref,
                                   const char *command,
-                                  const char *args_xcdn) {
+                                  const char *args_xcdn, const uint8_t *expected_sha256) {
   astools_tool *t = NULL;
   const astools_cmd *cmd;
   xcdn_document_t *doc = NULL;
@@ -110,6 +110,11 @@ astools_err astools_validate_impl(astools_ctx *c, const char *ref,
   if (!c || !ref || !command) return ASTOOLS_ERR_INVALID;
   e = astools_registry_resolve(c, ref, &t);
   if (e != ASTOOLS_OK) return e;
+  if (expected_sha256) {
+    e = astools_registry_revalidate(c,t);
+    if (e == ASTOOLS_OK) e = astools_registry_check_snapshot(c,t,expected_sha256);
+    if (e != ASTOOLS_OK) goto done;
+  }
   cmd = astools_manifest_cmd(t->m, command);
   if (!cmd) {
     e = cmd_not_found(c, t, command);
@@ -120,6 +125,13 @@ astools_err astools_validate_impl(astools_ctx *c, const char *ref,
   e = astools_args_validate(cmd, args, verr, sizeof verr);
   if (e != ASTOOLS_OK)
     e = astools_seterr(c, ASTOOLS_ERR_INVALID, "%s", verr);
+  if (e == ASTOOLS_OK && expected_sha256) {
+    astools_effective eff = {0}; char *deny = NULL;
+    e = astools_policy_effective(c,t,&eff);
+    if (e == ASTOOLS_OK) e = astools_policy_preflight(c,t,cmd,args,&eff,&deny);
+    if (e == ASTOOLS_ERR_DENIED) astools_seterr(c,e,"%s",deny ? deny : "denied by policy");
+    free(deny); astools_effective_free(&eff);
+  }
 done:
   xcdn_document_free(doc);
   astools_tool_unref(t);
@@ -160,7 +172,7 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                                 const char *command, const char *args_xcdn,
                                 uint32_t deadline_ms,
                                 astools_task *cancel_task,
-                                astools_result *out) {
+                                const uint8_t *expected_sha256, astools_result *out) {
   astools_tool *t = NULL;
   const astools_cmd *cmd = NULL;
   xcdn_document_t *doc = NULL;
@@ -194,8 +206,10 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
   /* 1. resolve ref, find command. */
   e = astools_registry_resolve(c, ref, &t);
   if (e != ASTOOLS_OK) goto cleanup_early;
-  e = astools_registry_revalidate(c, t);
-  if (e != ASTOOLS_OK) goto done;
+  if (expected_sha256 && memcmp(expected_sha256,t->content_sha256,32)) {
+    e = astools_seterr(c,ASTOOLS_ERR_DENIED,"tool changed after selection; discover it again");
+    goto done;
+  }
   cmd = astools_manifest_cmd(t->m, command);
   if (!cmd) {
     e = cmd_not_found(c, t, command);
@@ -235,8 +249,8 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                           : (cmd->timeout_ms > 0 ? cmd->timeout_ms
                                                  : c->cfg.timeout_ms);
   if (dl_ms <= 0) dl_ms = 30000;
-  deadline_mono = astools_mono(c) + dl_ms;
-  e = astools_slot_acquire(c, deadline_mono);
+  deadline_mono = dl_ms > INT64_MAX-t0 ? INT64_MAX : t0+dl_ms;
+  e = astools_slot_acquire(c, deadline_mono,cancel_task);
   if (e != ASTOOLS_OK) {
     if (e == ASTOOLS_ERR_TIMEOUT)
       e = astools_seterr(c, ASTOOLS_ERR_TIMEOUT,
@@ -244,10 +258,21 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
     goto done;
   }
   have_slot = 1;
+  /* Admission can wait: refresh availability and byte identity afterwards. */
+  astools_tool *current = NULL;
+  e = astools_registry_resolve(c,ref,&current);
+  if (e == ASTOOLS_OK && memcmp(current->content_sha256,t->content_sha256,32))
+    e = astools_seterr(c,ASTOOLS_ERR_DENIED,"tool changed while awaiting a slot");
+  if (e == ASTOOLS_OK) e = astools_registry_revalidate(c,current);
+  if (e == ASTOOLS_OK && expected_sha256) e = astools_registry_check_snapshot(c,current,expected_sha256);
+  astools_tool_unref(current);
+  if (e != ASTOOLS_OK) goto done;
+  if (astools_task_cancelled(cancel_task)) { e = ASTOOLS_ERR_CANCELLED; goto done; }
+  if (astools_mono(c) >= deadline_mono) { e = ASTOOLS_ERR_TIMEOUT; goto done; }
 
   /* 5. dispatch by kind/mode inside the sandbox. */
   astools_uuid_v4(id);
-  deadline_wall = astools_clock_now(&c->clock) + (dl_ms + 999) / 1000;
+  deadline_wall = astools_clock_now(&c->clock) + (deadline_mono-astools_mono(c)+999) / 1000;
 
   if (t->m->kind == ASTOOLS_KIND_LIBRARY) {
     if (!c->cfg.allow_library || t->trust != ASTOOLS_TRUST_FULL) {

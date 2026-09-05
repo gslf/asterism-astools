@@ -619,12 +619,18 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                                 const char *command, const char *args_xcdn,
                                 uint32_t deadline_ms,
                                 astools_task *cancel_task,
-                                astools_result *out);
+                                const uint8_t *expected_sha256, astools_result *out);
+
+astools_err astools_invoke_async_checked(astools_ctx *c, const char *ref,
+    const char *command, const char *args, uint32_t deadline_ms,
+    const uint8_t *expected_sha256, astools_task **out);
+astools_err astools_registry_check_snapshot(astools_ctx *c, const astools_tool *tool,
+    const uint8_t expected_sha256[32]);
 
 /* Validation-only path (public astools_validate_args). */
 astools_err astools_validate_impl(astools_ctx *c, const char *ref,
-                                  const char *command,
-                                  const char *args_xcdn);
+                                  const char *command, const char *args_xcdn,
+                                  const uint8_t *expected_sha256);
 
 /* ═══════════════════════ worker.c ═══════════════════════ */
 
@@ -670,12 +676,15 @@ astools_err astools_worker_tick(astools_ctx *c);
 
 /* Slot admission (invocation.max_concurrent). Blocks until a slot or
  * deadline_mono (<=0: forever). ASTOOLS_ERR_TIMEOUT on overrun. */
-astools_err astools_slot_acquire(astools_ctx *c, int64_t deadline_mono);
+int astools_task_cancelled(astools_task *task);
+astools_err astools_slot_acquire(astools_ctx *c, int64_t deadline_mono, astools_task *cancel);
 void        astools_slot_release(astools_ctx *c);
 
 /* Async task object (astools_invoke_async). */
 struct astools_task {
   astools_ctx *c;
+  bool checked;
+  uint8_t expected_sha256[32];
   char *ref, *command, *args;
   uint32_t deadline_ms;
   os_mutex mu;
@@ -746,6 +755,7 @@ struct astools_ctx {
   astools_lockfile lockfile;
   os_rwlock lock;
   int64_t last_scan_mono;
+  uint64_t registry_revision; /* process-local selection/cache version */
   uint64_t scan_fingerprint; /* compact digest of published tool contents */
   astools_time last_refresh_unix;
   bool tools_changed_flag; /* set by scan for MCP list_changed; consumer
@@ -754,7 +764,7 @@ struct astools_ctx {
   /* invocation slots */
   os_mutex slot_mu;
   os_cond slot_cv;
-  int slots_used;
+  int slots_used, slots_waiting;
 
   /* persistent processes (guarded by pp_mu; worker reaps idle) */
   astools_pproc *pprocs;

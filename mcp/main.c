@@ -764,11 +764,11 @@ static int mgmt_call(mcp_server *s, const jx_value *id, const char *name,
             &b,
             "{tools_total: %zu, tools_enabled: %zu, "
             "tools_unavailable: %zu, invocations: %zu, ok: %zu, "
-            "failed: %zu, denied: %zu, timeouts: %zu, cancelled: %zu, "
+            "failed: %zu, denied: %zu, timeouts: %zu, cancelled: %zu, active: %zu, queued: %zu, "
             "last_refresh_unix: %lld, last_invocation_unix: %lld}",
             st.tools_total, st.tools_enabled, st.tools_unavailable,
             st.invocations, st.ok, st.failed, st.denied, st.timeouts,
-            st.cancelled, (long long)st.last_refresh_unix,
+            st.cancelled, st.active, st.queued, (long long)st.last_refresh_unix,
             (long long)st.last_invocation_unix) != ASTOOLS_OK) {
       astools_buf_free(&b);
       reply_error(id, -32603, "out of memory", NULL);

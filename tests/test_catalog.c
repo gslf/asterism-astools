@@ -199,7 +199,33 @@ TEST(command_contracts_follow_enabled_registry) {
   cat_drop(&f);
 }
 
+TEST(pinned_version_matches_invocation) {
+  cat_fx f;
+  ASSERT_TRUE(cat_setup(&f,NULL));
+  /* This immutable configuration is normally loaded before worker startup;
+   * the fixture has registry watching disabled. */
+  f.c->cfg.pins = calloc(1,sizeof *f.c->cfg.pins);
+  ASSERT_TRUE(f.c->cfg.pins != NULL);
+  f.c->cfg.pins_len = 1;
+  f.c->cfg.pins[0].tool = astools_strdup("aaa");
+  f.c->cfg.pins[0].version = astools_strdup("2.0.0");
+  astools_tool *tool = NULL;
+  ASSERT_EQ_INT(astools_registry_resolve(f.c,"aaa",&tool),ASTOOLS_ERR_NOT_FOUND);
+  char *catalog = NULL, *schema = NULL, *grammar = NULL;
+  ASSERT_OK(astools_catalog(f.c,ASTOOLS_CATALOG_FULL,0,&catalog));
+  ASSERT_OK(astools_command_schemas(f.c,&schema));
+  ASSERT_OK(astools_grammar_export(f.c,&grammar));
+  ASSERT_TRUE(!strstr(catalog,"aaa") && !strstr(schema,"aaa.") && !strstr(grammar,"aaa."));
+  astools_free(catalog); astools_free(schema); astools_free(grammar);
+  free(f.c->cfg.pins[0].version); f.c->cfg.pins[0].version = astools_strdup("1.0.0");
+  ASSERT_OK(astools_registry_resolve(f.c,"aaa",&tool)); astools_tool_unref(tool);
+  ASSERT_OK(astools_command_schemas(f.c,&schema));
+  ASSERT_TRUE(strstr(schema,"aaa.") != NULL); astools_free(schema);
+  cat_drop(&f);
+}
+
 TEST_LIST = {
+  TEST_ENTRY(pinned_version_matches_invocation),
   TEST_ENTRY(command_contracts_follow_enabled_registry),
   TEST_ENTRY(deterministic_byte_identical),
   TEST_ENTRY(ordering_by_id_ascending),

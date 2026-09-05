@@ -19,6 +19,7 @@ set(ASTOOLS_TESTS
   test_regex
   test_jscm
   test_catalog
+  test_discovery
   test_project_receipt
   test_sandbox
   test_invoke
@@ -30,6 +31,7 @@ set(ASTOOLS_TESTS_WITH_FAKES
   test_policy
   test_lockfile
   test_catalog
+  test_discovery
   test_invoke
   test_escape
 )

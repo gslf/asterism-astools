@@ -19,7 +19,7 @@
  * smaller exists.
  */
 
-#include "astools_internal.h"
+#include "discovery.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -314,4 +314,15 @@ done:
   if (!*out)
     return astools_seterr(c, ASTOOLS_ERR_NOMEM, "catalog: out of memory");
   return ASTOOLS_OK;
+}
+
+/* Full schemas and grammar use exactly this same command sequence. */
+astools_err astools_catalog_commands(const astools_command_view *commands, size_t count,
+    astools_catalog_level level, char **out) {
+  astools_buf b; astools_buf_init(&b);
+  astools_err e = astools_buf_appends(&b,k_header);
+  for (size_t i = 0; i < count && e == ASTOOLS_OK; i++)
+    e = render_cmd(&b,commands[i].tool->m,commands[i].command,level);
+  *out = e == ASTOOLS_OK ? astools_buf_detach(&b) : NULL;
+  astools_buf_free(&b); return e;
 }

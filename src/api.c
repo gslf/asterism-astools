@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+int astools_abi_version(void) { return ASTOOLS_ABI_VERSION; }
+
 /* ---- error names / reporting -------------------------------------------- */
 
 static const char *const err_names[] = {
@@ -417,6 +419,7 @@ astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on) {
   char *id = NULL;
   const char *ver = NULL;
   size_t i, matched = 0;
+  bool changed = false;
   astools_err e;
   if (!c || !ref)
     return astools_seterr(c, ASTOOLS_ERR_INVALID,
@@ -429,6 +432,7 @@ astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on) {
     astools_tool *t = c->tools[i];
     if (strcmp(t->m->id, id) != 0) continue;
     if (ver && strcmp(t->m->version, ver) != 0) continue;
+    changed |= t->host_disabled != (on == 0);
     t->host_disabled = (on == 0);
     /* Mirror registry.c: enabled = host toggle AND pinning gate; under
      * "enforce" only a hash-verified lockfile entry passes. */
@@ -437,6 +441,7 @@ astools_err astools_tool_enable(astools_ctx *c, const char *ref, int on) {
                    t->lock_state != ASTOOLS_LOCK_OK);
     matched++;
   }
+  if (changed) { c->registry_revision++; c->tools_changed_flag = true; }
   if (matched > 0) {
     size_t en = 0;
     for (i = 0; i < c->tools_n; i++)
@@ -638,7 +643,7 @@ astools_err astools_validate_args(astools_ctx *c, const char *ref,
   if (!c || !ref || !command)
     return astools_seterr(c, ASTOOLS_ERR_INVALID,
                           "validate_args: bad arguments");
-  return astools_validate_impl(c, ref, command, args_xcdn);
+  return astools_validate_impl(c, ref, command, args_xcdn, NULL);
 }
 
 astools_err astools_invoke(astools_ctx *c, const char *ref,
@@ -647,7 +652,7 @@ astools_err astools_invoke(astools_ctx *c, const char *ref,
   if (!c || !ref || !command || !out)
     return astools_seterr(c, ASTOOLS_ERR_INVALID, "invoke: bad arguments");
   memset(out, 0, sizeof *out);
-  return astools_invoke_impl(c, ref, command, args_xcdn, deadline_ms, NULL,
+  return astools_invoke_impl(c, ref, command, args_xcdn, deadline_ms, NULL, NULL,
                              out);
 }
 
@@ -672,6 +677,9 @@ astools_err astools_get_stats(astools_ctx *c, astools_stats *out) {
   if (c->last_refresh_unix > out->last_refresh_unix)
     out->last_refresh_unix = c->last_refresh_unix;
   os_rwlock_rdunlock(&c->lock);
+  os_mutex_lock(&c->slot_mu);
+  out->active = (size_t)c->slots_used; out->queued = (size_t)c->slots_waiting;
+  os_mutex_unlock(&c->slot_mu);
   return ASTOOLS_OK;
 }
 

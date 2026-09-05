@@ -87,3 +87,9 @@ MIT [LICENSE](LICENSE).
 Schemas from the same typed manifests used by MCP. Catalog, GBNF and this export
 share one registry selector. Exported availability does not bypass the host's
 argument-dependent invocation policy.
+
+Command discovery can produce an immutable selection shared by catalog, grammar
+and JSON Schema. Checked invocation binds commands to their selected version and
+content, including after queue waits. See [discovery](docs/discovery.md) for the
+API, limits, permissions and tests. Active and queued invocations are observable;
+queue cancellation no longer waits for another invocation to release its slot.

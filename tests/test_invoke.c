@@ -520,7 +520,71 @@ TEST(configured_executable_paths_reach_child) {
   inv_drop(&f);
 }
 
+TEST(selected_invocation_uses_existing_pipeline) {
+  inv_fx f; ASSERT_TRUE(inv_setup_level(&f,NULL));
+  const char *allow[] = {"fk.run"};
+  astools_discovery_options o = {.allow=allow,.allow_count=1};
+  astools_selection *selection = NULL;
+  ASSERT_OK(astools_discover(f.c,&o,&selection));
+  ASSERT_EQ_INT(astools_selection_count(selection),1);
+  astools_result result;
+  ASSERT_OK(astools_selection_invoke(selection,"fk.run","{msg:\"selected\"}",1000,&result));
+  ASSERT_TRUE(result.ok && strstr(result.result_xcdn,"selected")); astools_result_free(&result);
+  ASSERT_EQ_INT(astools_selection_invoke(selection,"fk.run","{}",1000,&result),ASTOOLS_ERR_INVALID);
+  astools_result_free(&result);
+#ifndef ASTOOLS_NO_THREADS
+  astools_task *task = NULL;
+  ASSERT_OK(astools_selection_invoke_async(selection,"fk.run","{msg:\"async selected\"}",1000,&task));
+  astools_selection_free(selection); selection = NULL;
+  ASSERT_OK(astools_task_wait(task,2000,&result));
+  ASSERT_TRUE(result.ok && strstr(result.result_xcdn,"async selected"));
+  astools_result_free(&result); astools_task_free(task);
+#endif
+  astools_selection_free(selection); inv_drop(&f);
+}
+
+TEST(selection_rechecked_after_queue_and_cancellable) {
+#ifndef ASTOOLS_NO_THREADS
+  inv_fx f; ASSERT_TRUE(inv_setup_level(&f,NULL)); f.c->cfg.max_concurrent = 1;
+  const char *allow[] = {"fk.run"};
+  astools_discovery_options o = {.allow=allow,.allow_count=1};
+  astools_selection *selection = NULL; ASSERT_OK(astools_discover(f.c,&o,&selection));
+  for (int scenario = 0; scenario < 3; scenario++) {
+    ASSERT_OK(astools_slot_acquire(f.c,0,NULL));
+    astools_task *task = NULL;
+    ASSERT_OK(astools_selection_invoke_async(selection,"fk.run","{msg:\"queued\"}",3000,&task));
+    int64_t until = os_monotonic_ms()+2000;
+    os_mutex_lock(&f.c->slot_mu);
+    while (!f.c->slots_waiting && os_monotonic_ms() < until)
+      (void)os_cond_timedwait(&f.c->slot_cv,&f.c->slot_mu,5);
+    int waiting = f.c->slots_waiting;
+    os_mutex_unlock(&f.c->slot_mu);
+    ASSERT_EQ_INT(waiting,1);
+    astools_stats stats; ASSERT_OK(astools_get_stats(f.c,&stats));
+    ASSERT_EQ_INT(stats.active,1); ASSERT_EQ_INT(stats.queued,1);
+    if (scenario == 0) ASSERT_OK(astools_task_cancel(task));
+    else if (scenario == 1) ASSERT_OK(astools_tool_enable(f.c,"fk",0));
+    else {
+      char path[512]; snprintf(path,sizeof path,"%s/fk/manifest.xcdn",f.root_raw);
+      FILE *file = fopen(path,"ab"); ASSERT_TRUE(file != NULL);
+      ASSERT_EQ_INT(fputc('\n',file),'\n'); ASSERT_EQ_INT(fclose(file),0);
+    }
+    if (scenario) astools_slot_release(f.c);
+    astools_result result;
+    ASSERT_EQ_INT(astools_task_wait(task,1000,&result),scenario ? ASTOOLS_ERR_DENIED : ASTOOLS_ERR_CANCELLED);
+    ASSERT_TRUE(!result.ok); astools_result_free(&result); astools_task_free(task);
+    if (!scenario) astools_slot_release(f.c);
+    if (scenario == 1) ASSERT_OK(astools_tool_enable(f.c,"fk",1));
+    ASSERT_OK(astools_get_stats(f.c,&stats));
+    ASSERT_EQ_INT(stats.active,0); ASSERT_EQ_INT(stats.queued,0);
+  }
+  astools_selection_free(selection); inv_drop(&f);
+#endif
+}
+
 TEST_LIST = {
+  TEST_ENTRY(selection_rechecked_after_queue_and_cancellable),
+  TEST_ENTRY(selected_invocation_uses_existing_pipeline),
   TEST_ENTRY(echo_canonical_path_and_default),
   TEST_ENTRY(validation_errors),
   TEST_ENTRY(crash_is_err_tool),

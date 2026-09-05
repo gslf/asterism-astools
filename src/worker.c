@@ -90,45 +90,6 @@ static void stderr_excerpt(const astools_buf *errb, char *out, size_t cap) {
   out[o] = '\0';
 }
 
-/* ---- slot admission (invocation.max_concurrent) -------------------------- */
-
-astools_err astools_slot_acquire(astools_ctx *c, int64_t deadline_mono) {
-  int max;
-  if (!c) return ASTOOLS_ERR_INVALID;
-  max = c->cfg.max_concurrent > 0 ? c->cfg.max_concurrent : 1;
-  os_mutex_lock(&c->slot_mu);
-  while (c->slots_used >= max) {
-    int64_t wait_ms = 100;
-    if (deadline_mono > 0) {
-      int64_t now = astools_mono(c);
-      if (now >= deadline_mono) {
-        os_mutex_unlock(&c->slot_mu);
-        return ASTOOLS_ERR_TIMEOUT;
-      }
-      wait_ms = deadline_mono - now;
-      /* short slices so injected test clocks are re-checked */
-      if (wait_ms > 100) wait_ms = 100;
-    }
-    if (c->no_threads) {
-      /* single-threaded: nobody can ever release a slot while we wait */
-      os_mutex_unlock(&c->slot_mu);
-      return deadline_mono > 0 ? ASTOOLS_ERR_TIMEOUT : ASTOOLS_ERR_BUSY;
-    }
-    (void)os_cond_timedwait(&c->slot_cv, &c->slot_mu, wait_ms);
-  }
-  c->slots_used++;
-  os_mutex_unlock(&c->slot_mu);
-  return ASTOOLS_OK;
-}
-
-void astools_slot_release(astools_ctx *c) {
-  if (!c) return;
-  os_mutex_lock(&c->slot_mu);
-  if (c->slots_used > 0) c->slots_used--;
-  os_cond_signal(&c->slot_cv);
-  os_mutex_unlock(&c->slot_mu);
-}
-
 /* ---- oneshot execution -------------------------------------------- */
 
 enum {
@@ -139,15 +100,6 @@ enum {
   ONE_OVERFLOW,
   ONE_NOMEM
 };
-
-static int task_cancelled(astools_task *t) {
-  int cancelled;
-  if (!t) return 0;
-  os_mutex_lock(&t->mu);
-  cancelled = t->cancelled ? 1 : 0;
-  os_mutex_unlock(&t->mu);
-  return cancelled;
-}
 
 astools_err astools_exec_oneshot(astools_ctx *c,
                                  const astools_sandbox_setup *setup,
@@ -208,7 +160,7 @@ astools_err astools_exec_oneshot(astools_ctx *c,
     int want_write;
     int64_t slice;
     now = astools_mono(c);
-    if (task_cancelled(cancel_task)) {
+    if (astools_task_cancelled(cancel_task)) {
       status = ONE_CANCEL;
       break;
     }
@@ -520,7 +472,7 @@ static astools_err pp_read_line(astools_ctx *c, astools_pproc *p,
       *out_line = line;
       return ASTOOLS_OK;
     }
-    if (task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
+    if (astools_task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     now = astools_mono(c);
     if (now >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
     slice = deadline_mono - now;
@@ -574,7 +526,7 @@ static astools_err pp_write_all(astools_ctx *c, astools_pproc *p,
   while (off < len || !nl_done) {
     unsigned ready = 0;
     int64_t now, slice;
-    if (task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
+    if (astools_task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     now = astools_mono(c);
     if (now >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
     slice = deadline_mono - now;
@@ -643,7 +595,7 @@ static astools_err pp_ensure_alive(astools_ctx *c, const astools_tool *t,
   for (;;) {
     int64_t now = astools_mono(c), wait;
     if (p->next_restart_mono <= now) break;
-    if (task_cancelled(cancel_task)) {
+    if (astools_task_cancelled(cancel_task)) {
       result_set(r, "astools/cancelled", "invocation cancelled");
       return astools_seterr(c, ASTOOLS_ERR_CANCELLED,
                             "invocation cancelled");
@@ -1112,130 +1064,4 @@ astools_err astools_worker_tick(astools_ctx *c) {
   if (!c) return ASTOOLS_ERR_INVALID;
   worker_pass(c);
   return ASTOOLS_OK;
-}
-
-/* ---- async tasks (astools_invoke_async) ----------------------------------- */
-
-#if !defined(ASTOOLS_NO_THREADS)
-static void *task_main(void *arg) {
-  astools_task *t = arg;
-  astools_result res;
-  astools_err v =
-      astools_invoke_impl(t->c, t->ref, t->command, t->args,
-                          t->deadline_ms, t, &res);
-  os_mutex_lock(&t->mu);
-  t->result = res;
-  t->verdict = v;
-  t->done = true;
-  os_cond_broadcast(&t->cv);
-  os_mutex_unlock(&t->mu);
-  return NULL;
-}
-#endif
-
-astools_err astools_invoke_async(astools_ctx *c, const char *ref,
-                                 const char *command, const char *args_xcdn,
-                                 uint32_t deadline_ms, astools_task **out) {
-  if (out) *out = NULL;
-  if (!c || !ref || !command || !out) return ASTOOLS_ERR_INVALID;
-#if defined(ASTOOLS_NO_THREADS)
-  (void)args_xcdn;
-  (void)deadline_ms;
-  return astools_seterr(c, ASTOOLS_ERR_UNSUPPORTED,
-                        "async invocation needs threads "
-                        "(ASTOOLS_NO_THREADS build)");
-#else
-  if (c->no_threads)
-    return astools_seterr(c, ASTOOLS_ERR_UNSUPPORTED,
-                          "async invocation is unavailable in "
-                          "no-thread mode");
-  {
-    astools_task *t = calloc(1, sizeof *t);
-    astools_err e;
-    if (!t) return ASTOOLS_ERR_NOMEM;
-    t->c = c;
-    t->ref = astools_strdup(ref);
-    t->command = astools_strdup(command);
-    t->args = astools_strdup(args_xcdn); /* NULL-safe */
-    t->deadline_ms = deadline_ms;
-    os_mutex_init(&t->mu);
-    os_cond_init(&t->cv);
-    if (!t->ref || !t->command || (args_xcdn && !t->args)) {
-      e = ASTOOLS_ERR_NOMEM;
-      goto fail;
-    }
-    e = os_thread_start(&t->thread, task_main, t);
-    if (e != ASTOOLS_OK) {
-      (void)astools_seterr(c, e, "cannot start invocation thread");
-      goto fail;
-    }
-    t->thread_valid = true;
-    *out = t;
-    return ASTOOLS_OK;
-  fail:
-    os_mutex_destroy(&t->mu);
-    os_cond_destroy(&t->cv);
-    free(t->ref);
-    free(t->command);
-    free(t->args);
-    free(t);
-    return e;
-  }
-#endif
-}
-
-astools_err astools_task_wait(astools_task *t, uint32_t timeout_ms,
-                              astools_result *out) {
-  int64_t end;
-  astools_err v;
-  if (!t) return ASTOOLS_ERR_INVALID;
-  end = os_monotonic_ms() + (int64_t)timeout_ms;
-  os_mutex_lock(&t->mu);
-  while (!t->done) {
-    int64_t rem = end - os_monotonic_ms();
-    if (rem <= 0) {
-      os_mutex_unlock(&t->mu);
-      return ASTOOLS_ERR_BUSY;
-    }
-    (void)os_cond_timedwait(&t->cv, &t->mu, rem);
-  }
-  if (out) {
-    /* Ownership of the result strings transfers on the first delivery;
-     * later waits observe the same verdict/scalars with NULL strings. */
-    *out = t->result;
-    t->result.result_xcdn = NULL;
-    t->result.error_code = NULL;
-    t->result.error_message = NULL;
-  }
-  v = t->verdict;
-  os_mutex_unlock(&t->mu);
-  return v;
-}
-
-astools_err astools_task_cancel(astools_task *t) {
-  if (!t) return ASTOOLS_ERR_INVALID;
-  os_mutex_lock(&t->mu);
-  t->cancelled = true;
-  os_mutex_unlock(&t->mu);
-  return ASTOOLS_OK;
-}
-
-void astools_task_free(astools_task *t) {
-  if (!t) return;
-  os_mutex_lock(&t->mu);
-  t->cancelled = true; /* unblock a still-running invocation */
-  os_mutex_unlock(&t->mu);
-  if (t->thread_valid) {
-    os_thread_join(&t->thread);
-    t->thread_valid = false;
-  }
-  free(t->ref);
-  free(t->command);
-  free(t->args);
-  free(t->result.result_xcdn);
-  free(t->result.error_code);
-  free(t->result.error_message);
-  os_mutex_destroy(&t->mu);
-  os_cond_destroy(&t->cv);
-  free(t);
 }

@@ -499,7 +499,7 @@ astools_err astools_registry_scan(astools_ctx *c, int *out_changed) {
   c->stats.tools_enabled = n_enabled;
   c->stats.tools_unavailable = n_unavail;
   c->stats.last_refresh_unix = c->last_refresh_unix;
-  if (changed) c->tools_changed_flag = true;
+  if (changed) { c->tools_changed_flag = true; c->registry_revision++; }
   os_rwlock_wrunlock(&c->lock);
 
   /* release replaced descriptors outside the lock */
@@ -684,4 +684,18 @@ astools_err astools_registry_revalidate(astools_ctx *c,
                         "tool '%s@%s' changed after registry validation; "
                         "execution denied by pinning=\"enforce\"",
                         t->m->id, t->m->version);
+}
+
+/* Bind an accepted command to both its selected descriptor and current bytes.
+ * This does not make filesystem replacement atomic with process creation. */
+astools_err astools_registry_check_snapshot(astools_ctx *c, const astools_tool *t,
+    const uint8_t expected[32]) {
+  if (!c || !t || !expected) return ASTOOLS_ERR_INVALID;
+  astools_root root = {0}; root.trust = t->trust;
+  astools_tool *current = load_package(c,&root,t->pkg_dir);
+  bool same = current && !memcmp(expected,t->content_sha256,32) &&
+      !memcmp(expected,current->content_sha256,32);
+  astools_tool_unref(current);
+  return same ? ASTOOLS_OK : astools_seterr(c,ASTOOLS_ERR_DENIED,
+      "tool '%s@%s' changed after selection; discover it again",t->m->id,t->m->version);
 }

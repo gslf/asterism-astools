@@ -24,7 +24,7 @@
  * literal "{}".
  */
 
-#include "astools_internal.h"
+#include "discovery.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -95,34 +95,20 @@ static char *make_rule_name(const char *tool, const char *cmd,
   return NULL;
 }
 
-static astools_err build_rules(astools_tool **list, size_t n, gbnf_rule **out,
-                               size_t *out_n) {
-  size_t total = 0, i, j, k = 0;
-  gbnf_rule *rules;
-
-  *out = NULL;
-  *out_n = 0;
-  for (i = 0; i < n; i++) total += list[i]->m->commands_len;
-  if (total == 0) return ASTOOLS_OK;
-  rules = calloc(total, sizeof *rules);
+static astools_err build_rules(const astools_command_view *commands, size_t count,
+    gbnf_rule **out, size_t *out_n) {
+  *out = NULL; *out_n = 0;
+  if (!count) return ASTOOLS_OK;
+  gbnf_rule *rules = calloc(count,sizeof *rules);
   if (!rules) return ASTOOLS_ERR_NOMEM;
-  for (i = 0; i < n; i++) {
-    const astools_manifest *m = list[i]->m;
-    for (j = 0; j < m->commands_len; j++) {
-      char *name = make_rule_name(m->id, m->commands[j].name, rules, k);
-      if (!name) {
-        free_rules(rules, k);
-        return ASTOOLS_ERR_NOMEM;
-      }
-      rules[k].m = m;
-      rules[k].cmd = &m->commands[j];
-      rules[k].name = name;
-      k++;
-    }
+  for (size_t i = 0; i < count; i++) {
+    const astools_manifest *m = commands[i].tool->m;
+    const astools_cmd *cmd = commands[i].command;
+    char *name = make_rule_name(m->id,cmd->name,rules,i);
+    if (!name) { free_rules(rules,i); return ASTOOLS_ERR_NOMEM; }
+    rules[i].m = m; rules[i].cmd = cmd; rules[i].name = name;
   }
-  *out = rules;
-  *out_n = k;
-  return ASTOOLS_OK;
+  *out = rules; *out_n = count; return ASTOOLS_OK;
 }
 
 /* ---- value productions -------------------------------------------------- */
@@ -245,19 +231,16 @@ static astools_err emit_cmd_rule(astools_buf *b, const gbnf_rule *ge) {
 
 /* ---- entry point -------------------------------------------------------- */
 
-astools_err astools_gbnf_render(astools_ctx *c, char **out) {
-  astools_tool **list = NULL;
+astools_err astools_gbnf_commands(const astools_command_view *commands, size_t count, char **out) {
   gbnf_rule *rules = NULL;
-  size_t n = 0, nrules = 0, i;
+  size_t nrules = 0, i;
   astools_buf b;
   astools_err e;
 
-  if (!c || !out) return ASTOOLS_ERR_INVALID;
+  if (!out) return ASTOOLS_ERR_INVALID;
   *out = NULL;
   astools_buf_init(&b);
-  os_rwlock_rdlock(&c->lock);
-  e = astools_collect_tools(c, &list, &n);
-  if (e == ASTOOLS_OK) e = build_rules(list, n, &rules, &nrules);
+  e = build_rules(commands,count,&rules,&nrules);
   if (e == ASTOOLS_OK)
     e = astools_buf_appends(&b, "root ::= \"CALL \" call \"\\n\"\n");
   if (e == ASTOOLS_OK) {
@@ -277,15 +260,34 @@ astools_err astools_gbnf_render(astools_ctx *c, char **out) {
   for (i = 0; i < nrules && e == ASTOOLS_OK; i++)
     e = emit_cmd_rule(&b, &rules[i]);
   if (e == ASTOOLS_OK) e = astools_buf_appends(&b, k_terminals);
-  os_rwlock_rdunlock(&c->lock);
-  free(list);
+
   free_rules(rules, nrules);
   if (e != ASTOOLS_OK) {
     astools_buf_free(&b);
-    return astools_seterr(c, e, "gbnf: render failed");
+    return e;
   }
   *out = astools_buf_detach(&b);
   if (!*out)
-    return astools_seterr(c, ASTOOLS_ERR_NOMEM, "gbnf: out of memory");
+    return ASTOOLS_ERR_NOMEM;
   return ASTOOLS_OK;
+}
+
+astools_err astools_gbnf_render(astools_ctx *c, char **out) {
+  if (!c || !out) return ASTOOLS_ERR_INVALID;
+  astools_tool **tools = NULL; size_t n = 0, count = 0;
+  astools_command_view *commands = NULL;
+  os_rwlock_rdlock(&c->lock);
+  astools_err e = astools_collect_tools(c,&tools,&n);
+  for (size_t i = 0; i < n; i++) count += tools[i]->m->commands_len;
+  if (e == ASTOOLS_OK && count) {
+    commands = calloc(count,sizeof *commands);
+    if (!commands) e = ASTOOLS_ERR_NOMEM;
+  }
+  size_t k = 0;
+  for (size_t i = 0; e == ASTOOLS_OK && i < n; i++)
+    for (size_t j = 0; j < tools[i]->m->commands_len; j++)
+      commands[k++] = (astools_command_view){tools[i],&tools[i]->m->commands[j]};
+  if (e == ASTOOLS_OK) e = astools_gbnf_commands(commands,count,out);
+  os_rwlock_rdunlock(&c->lock);
+  free(commands); free(tools); return e;
 }

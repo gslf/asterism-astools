@@ -8,6 +8,20 @@ static bool tool_listed(const astools_tool *t) {
          t->m->id != NULL;
 }
 
+/* A bare tool name must describe the same version that invocation resolves. */
+static bool matches_pin(const astools_ctx *c, const astools_tool *t) {
+  for (size_t i = 0; i < c->cfg.pins_len; i++) {
+    const astools_pin *pin = &c->cfg.pins[i];
+    if (!pin->tool || !pin->version || strcmp(pin->tool,t->m->id)) continue;
+    astools_semver version = {0};
+    if (!astools_semver_parse(pin->version,&version)) return false;
+    bool same = astools_semver_cmp(&version,&t->ver) == 0;
+    astools_semver_free(&version);
+    return same;
+  }
+  return true;
+}
+
 /* Release beats pre-release; then higher SemVer. Ties keep the incumbent
  * (first root wins). */
 static bool version_better(const astools_tool *cand, const astools_tool *cur) {
@@ -36,7 +50,7 @@ astools_err astools_collect_tools(astools_ctx *c, astools_tool ***out_list,
   if (!sel) return ASTOOLS_ERR_NOMEM;
   for (i = 0; i < c->tools_n; i++) {
     astools_tool *t = c->tools[i];
-    if (!tool_listed(t)) continue;
+    if (!tool_listed(t) || !matches_pin(c,t)) continue;
     for (j = 0; j < sel_n; j++)
       if (strcmp(sel[j]->m->id, t->m->id) == 0) break;
     if (j < sel_n) {
