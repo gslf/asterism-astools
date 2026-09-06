@@ -93,3 +93,7 @@ and JSON Schema. Checked invocation binds commands to their selected version and
 content, including after queue waits. See [discovery](docs/discovery.md) for the
 API, limits, permissions and tests. Active and queued invocations are observable;
 queue cancellation no longer waits for another invocation to release its slot.
+
+Optional [clangd semantic navigation](docs/lsp.md) adds symbols, definitions,
+references and versioned diagnostics through a managed LSP process. It uses the
+same host policy and package checks, with explicit coverage limits.

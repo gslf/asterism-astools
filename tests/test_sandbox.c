@@ -17,14 +17,15 @@
 TEST(nproc_cap_clears_current_usage) {
   int64_t used = 0, cap = 0;
 
-  if (os_proc_user_tasks(&used) != ASTOOLS_OK) {
-    /* No per-uid task count here: no cap may be claimed either. */
-    ASSERT_EQ_INT(astools_sandbox_nproc_cap(&cap), ASTOOLS_ERR_UNSUPPORTED);
+  astools_err e = astools_sandbox_nproc_cap(&cap, &used);
+  if (e != ASTOOLS_OK) {
+    ASSERT_EQ_INT(cap, 0);
+    ASSERT_EQ_INT(used, -1);
     return;
   }
-
-  ASSERT_TRUE(used >= 1); /* this process is itself a task */
-  ASSERT_OK(astools_sandbox_nproc_cap(&cap));
+  /* Both values come from one observation: unrelated desktop activity can
+   * change the account's population between any two separate samples. */
+  ASSERT_TRUE(used >= 1);
   /* The regression: true on an idle runner with a handful of tasks and on
    * a desktop session with thousands. A cap at or below current usage
    * makes the tool's first fork() fail with EAGAIN. */
@@ -41,7 +42,7 @@ TEST(process_cap_claim_matches_reality) {
 
   memset(&caps, 0, sizeof caps);
   ASSERT_OK(astools_sandbox_caps_impl(0, &caps));
-  can_cap = (astools_sandbox_nproc_cap(&cap) == ASTOOLS_OK);
+  can_cap = (astools_sandbox_nproc_cap(&cap, NULL) == ASTOOLS_OK);
 #if defined(__linux__)
   ASSERT_EQ_INT(caps.process_cap, can_cap);
 #elif defined(_WIN32)

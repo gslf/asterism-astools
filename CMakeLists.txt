@@ -79,6 +79,7 @@ endif()
 # ── libastools ───────────────────────────────────────────────────────────────
 set(ASTOOLS_SOURCES
   src/util.c
+  src/json.c
   src/time.c
   src/uuid.c
   src/sha256.c
@@ -99,6 +100,14 @@ set(ASTOOLS_SOURCES
   src/execution_oneshot.c
   src/process_pool.c
   src/process_io.c
+  src/process_frame.c
+  src/lsp_manifest.c
+  src/lsp_uri.c
+  src/lsp_file.c
+  src/lsp_rpc.c
+  src/lsp_initialize.c
+  src/lsp_results.c
+  src/lsp_query.c
   src/process_start.c
   src/process_exchange.c
   src/execution_library.c
@@ -235,7 +244,7 @@ endif()
 
 # ── astools-mcp ────────────────────────────────────────────────────────
 if(ASTOOLS_BUILD_MCP)
-  add_executable(astools-mcp mcp/main.c mcp/json.c)
+  add_executable(astools-mcp mcp/main.c)
   target_include_directories(astools-mcp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src

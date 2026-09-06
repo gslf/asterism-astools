@@ -1,6 +1,5 @@
 /*
- * test_json.c — mcp/json.c: strict RFC 8259 codec (jx). Compiled
- * against mcp/json.c directly.
+ * test_json.c — shared strict transport codec, linked from libastools.
  */
 
 #include "astools_test.h"
@@ -146,6 +145,15 @@ TEST(strictness_rejects) {
   ASSERT_TRUE(rejects("{\"a\"}"));
 }
 
+TEST(object_keys_are_unambiguous) {
+  ASSERT_TRUE(rejects("{\"id\":1,\"id\":2}"));
+  ASSERT_TRUE(rejects("{\"id\":null,\"id\":2}"));
+  ASSERT_TRUE(rejects("{\"id\":1,\"\\u0069d\":2}"));
+  ASSERT_TRUE(rejects("{\"id\\u0000suffix\":1}"));
+  ASSERT_TRUE(rejects("{\"nested\":{\"x\":1,\"x\":2}}"));
+  rt("{\"\":1,\"id\":2}", NULL);
+}
+
 TEST(number_views) {
   jx_value *v = NULL;
   ASSERT_EQ_INT(jx_parse("5", 1, &v), 0);
@@ -208,6 +216,7 @@ TEST_LIST = {
   TEST_ENTRY(trailing_garbage_rejected),
   TEST_ENTRY(strictness_rejects),
   TEST_ENTRY(number_views),
+  TEST_ENTRY(object_keys_are_unambiguous),
   TEST_ENTRY(constructors_and_containers),
 };
 

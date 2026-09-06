@@ -71,3 +71,6 @@ build-*/
 /workspace/
 /workspaces/
 *.log
+
+# Python tooling
+__pycache__/

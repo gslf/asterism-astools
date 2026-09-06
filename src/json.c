@@ -1,5 +1,5 @@
 /*
- * json.c — strict RFC 8259 JSON codec for astools-mcp. See json.h.
+ * json.c — strict RFC 8259 JSON codec for process transports. See json.h.
  */
 
 #include "json.h"
@@ -118,7 +118,7 @@ static size_t utf8_seq(const unsigned char *p, size_t avail) {
   return 0;
 }
 
-static int utf8_valid(const char *s, size_t len) {
+int jx_utf8_valid(const char *s, size_t len) {
   const unsigned char *p = (const unsigned char *)s;
   size_t i = 0;
   while (i < len) {
@@ -235,7 +235,7 @@ jx_value *jx_string(const char *utf8) {
   char *copy;
   if (!utf8) return NULL;
   len = strlen(utf8);
-  if (!utf8_valid(utf8, len)) return NULL;
+  if (!jx_utf8_valid(utf8, len)) return NULL;
   copy = malloc(len + 1);
   if (!copy) return NULL;
   memcpy(copy, utf8, len + 1);
@@ -475,7 +475,7 @@ static int p_hex4(jparse *p, unsigned *out) {
 }
 
 /* Caller verified the opening quote. *out is malloc'd + NUL-terminated;
- * *out_len excludes the terminator (embedded NULs from   counted). */
+ * *out_len excludes the terminator (embedded NULs from \u0000 counted). */
 static int p_string_raw(jparse *p, char **out, size_t *out_len) {
   jbuf b = {NULL, 0, 0};
   p->pos++; /* '"' */
@@ -676,6 +676,11 @@ static int p_object(jparse *p, jx_value **out) {
     skip_ws(p);
     if (p->pos >= p->len || p->s[p->pos] != '"') goto fail;
     if (p_string_raw(p, &key, &klen)) goto fail;
+    /* C-string keys must be unambiguous, including after escape decoding. */
+    if (strlen(key) != klen || jx_object_get(obj, key)) {
+      free(key);
+      goto fail;
+    }
     skip_ws(p);
     if (p->pos >= p->len || p->s[p->pos] != ':') {
       free(key);

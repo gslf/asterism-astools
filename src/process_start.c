@@ -1,5 +1,6 @@
 /* process start — runtime implementation. */
 #include "execution.h"
+#include "lsp.h"
 
 /* Spawn + #tool_hello handshake, honoring the crash backoff window. */
 astools_err astools_pp_ensure_alive(astools_ctx *c, const astools_tool *t,
@@ -13,6 +14,9 @@ astools_err astools_pp_ensure_alive(astools_ctx *c, const astools_tool *t,
   if (astools_task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
   if (astools_mono(c) >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
   if (p->alive) return ASTOOLS_OK;
+#ifdef _WIN32
+  if (t->m->protocol == ASTOOLS_PROTOCOL_LSP) return ASTOOLS_ERR_UNSUPPORTED;
+#endif
 
   for (;;) {
     int64_t now = astools_mono(c), wait;
@@ -67,6 +71,20 @@ astools_err astools_pp_ensure_alive(astools_ctx *c, const astools_tool *t,
   int64_t now = astools_mono(c);
   int64_t startup = t->m->startup_timeout_ms > 0 ? t->m->startup_timeout_ms : 10000;
   hello_deadline = startup < deadline_mono - now ? now + startup : deadline_mono;
+  if (t->m->protocol == ASTOOLS_PROTOCOL_LSP) {
+    e = astools_lsp_initialize(c, p, hello_deadline, cancel_task);
+    if (e != ASTOOLS_OK) {
+      astools_pp_stop(c, p, false);
+      astools_pp_backoff(c, p);
+      astools_exec_result_set(r, "astools/lsp-startup", "%s", p->lsp_error[0] ? p->lsp_error : astools_err_name(e));
+      return e;
+    }
+    p->alive = p->hello_done = true;
+    p->backoff_ms = 0;
+    p->next_restart_mono = 0;
+    p->last_used_mono = astools_mono(c);
+    return ASTOOLS_OK;
+  }
   {
     char *line = NULL;
     size_t llen = 0;

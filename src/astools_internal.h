@@ -201,6 +201,8 @@ astools_err astools_args_validate(const astools_cmd *cmd, xcdn_node_t *args,
 #define ASTOOLS_KIND_LIBRARY 1
 #define ASTOOLS_MODE_ONESHOT 0
 #define ASTOOLS_MODE_PERSISTENT 1
+#define ASTOOLS_PROTOCOL_NATIVE 0
+#define ASTOOLS_PROTOCOL_LSP 1
 
 typedef struct {
   char *path;  /* after ${workspace} expansion; may be relative (rare) */
@@ -261,6 +263,7 @@ typedef struct astools_manifest {
   char **platforms;
   size_t platforms_len;
   int mode; /* ASTOOLS_MODE_* */
+  int protocol; /* ASTOOLS_PROTOCOL_*; executable persistent LSP is opt-in. */
   astools_entry *entries;
   size_t entries_len;
   int64_t parallel;           /* persistent; default 1 */
@@ -270,6 +273,8 @@ typedef struct astools_manifest {
   astools_cmd *commands;
   size_t commands_len;
 } astools_manifest;
+
+bool astools_lsp_manifest_valid(const astools_manifest *m);
 
 /* Parse + schema-validate one manifest document. workspace expands
  * "${workspace}" in permission paths (may be NULL to leave verbatim).
@@ -561,8 +566,9 @@ astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out);
  * across the whole system rather than per process tree. A fixed cap would
  * deny fork() outright to every tool on a host that already runs more tasks
  * than the cap. ASTOOLS_ERR_UNSUPPORTED where usage cannot be read, meaning
- * no cap should be applied. */
-astools_err astools_sandbox_nproc_cap(int64_t *out);
+ * no cap should be applied. Optional observed receives the same sampled count
+ * used to derive out, or -1 when unavailable. */
+astools_err astools_sandbox_nproc_cap(int64_t *out, int64_t *observed);
 
 /* Tasks a tool may create beyond what the account already runs. */
 #define ASTOOLS_NPROC_HEADROOM 256

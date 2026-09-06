@@ -1,7 +1,9 @@
 # Persistent tool runtime
 
-An executable with `runtime.mode: "persistent"` speaks the ordered Astools line
-protocol. The runtime starts an instance, validates `#tool_hello`, then exchanges
+An executable with `runtime.mode: "persistent"` uses the ordered Astools line
+protocol by default. `runtime.protocol: "lsp"` selects the optional
+[semantic navigation adapter](lsp.md), which has its own handshake and closes
+failed exchanges by terminating the server. The runtime starts an instance, validates `#tool_hello`, then exchanges
 one request and matching response at a time. A manifest's `parallel` limit permits
 separate instances; it does not multiplex overlapping requests on one stream.
 

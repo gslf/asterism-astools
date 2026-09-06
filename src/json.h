@@ -1,13 +1,14 @@
 /*
- * json.h — strict RFC 8259 JSON codec for astools-mcp.
+ * json.h — strict RFC 8259 JSON codec for process transports.
  *
- * DOM-style value tree. In-house by design: JSON exists only in the MCP
- * layer; the rest of Astools speaks xCDN.
+ * DOM-style value tree shared by MCP and language-server transports.
+ * Tool manifests and ordinary tool requests still use xCDN.
  *
  * Guarantees:
  *   - Strict parsing: UTF-8 only (validated), \uXXXX escapes with surrogate
  *     pairs decoded to UTF-8, depth cap 64, no comments, no trailing
  *     garbage, no NaN/Inf, no unescaped control characters in strings.
+ *   - Duplicate keys and embedded NUL keys are rejected.
  *   - Numbers carry a double plus an int64 view when the literal is
  *     integral and in range (jx_is_int).
  *   - No global state; every function is thread-compatible over disjoint
@@ -23,10 +24,40 @@
  *   - Object keys are copied and treated as NUL-terminated C strings.
  */
 
-#ifndef ASTOOLS_MCP_JSON_H
-#define ASTOOLS_MCP_JSON_H
+#ifndef ASTOOLS_JSON_H
+#define ASTOOLS_JSON_H
 
 #include <stddef.h>
+#define jx_utf8_valid astls_x_jx_utf8_valid
+int jx_utf8_valid(const char *text, size_t len);
+
+/* Private link symbols cannot collide with an embedding host. */
+#define jx_parse astls_x_jx_parse
+#define jx_free astls_x_jx_free
+#define jx_clone astls_x_jx_clone
+#define jx_null astls_x_jx_null
+#define jx_bool astls_x_jx_bool
+#define jx_int astls_x_jx_int
+#define jx_double astls_x_jx_double
+#define jx_string astls_x_jx_string
+#define jx_array astls_x_jx_array
+#define jx_object astls_x_jx_object
+#define jx_typeof astls_x_jx_typeof
+#define jx_bool_value astls_x_jx_bool_value
+#define jx_is_int astls_x_jx_is_int
+#define jx_int_value astls_x_jx_int_value
+#define jx_double_value astls_x_jx_double_value
+#define jx_string_value astls_x_jx_string_value
+#define jx_string_length astls_x_jx_string_length
+#define jx_array_push astls_x_jx_array_push
+#define jx_array_len astls_x_jx_array_len
+#define jx_array_at astls_x_jx_array_at
+#define jx_object_set astls_x_jx_object_set
+#define jx_object_get astls_x_jx_object_get
+#define jx_object_count astls_x_jx_object_count
+#define jx_object_key_at astls_x_jx_object_key_at
+#define jx_object_value_at astls_x_jx_object_value_at
+#define jx_write astls_x_jx_write
 
 typedef enum {
   JX_NULL = 0,
@@ -91,4 +122,4 @@ jx_value   *jx_object_value_at(const jx_value *obj, size_t i);
  * transports. */
 char *jx_write(const jx_value *v, int pretty);
 
-#endif /* ASTOOLS_MCP_JSON_H */
+#endif /* ASTOOLS_JSON_H */

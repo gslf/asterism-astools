@@ -699,6 +699,22 @@ static bool parse_runtime(astools_manifest *m, const xcdn_value_t *obj,
     }
   }
 
+  n = xcdn_object_get(r, "protocol");
+  if (n) {
+    const char *s = node_str(n);
+    if (s && !strcmp(s, "astools")) m->protocol = ASTOOLS_PROTOCOL_NATIVE;
+    else if (s && !strcmp(s, "lsp")) m->protocol = ASTOOLS_PROTOCOL_LSP;
+    else {
+      set_err(err_msg, "manifest: runtime.protocol must be astools or lsp");
+      return false;
+    }
+  }
+  if (m->protocol == ASTOOLS_PROTOCOL_LSP &&
+      (m->kind != ASTOOLS_KIND_EXECUTABLE || m->mode != ASTOOLS_MODE_PERSISTENT)) {
+    set_err(err_msg, "manifest: lsp requires an executable persistent runtime");
+    return false;
+  }
+
   n = xcdn_object_get(r, "entry");
   if (n) {
     if (!node_is_type(n, XCDN_VAL_ARRAY)) {
@@ -1276,6 +1292,11 @@ astools_manifest *astools_manifest_parse(const char *text, size_t len,
     return NULL;
   }
 
+  if (!astools_lsp_manifest_valid(m)) {
+    set_err(err_msg, "manifest: invalid closed LSP command contract");
+    astools_manifest_free(m);
+    m = NULL;
+  }
   xcdn_document_free(doc);
   return m;
 }
@@ -1568,6 +1589,8 @@ static xcdn_node_t *render_runtime(const astools_manifest *m) {
   size_t i;
   if (!n) return NULL;
   o = n->value;
+  if (!obj_put_str(o, "protocol", m->protocol == ASTOOLS_PROTOCOL_LSP ? "lsp" : "astools"))
+    goto fail;
   if (!obj_put_str(o, "mode", m->mode == ASTOOLS_MODE_PERSISTENT
                                   ? "persistent"
                                   : "oneshot"))

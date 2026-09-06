@@ -630,7 +630,7 @@ astools_err astools_sandbox_prepare(astools_ctx *c, const astools_tool *t,
 #endif
     /* Unreadable usage leaves limit_nproc at 0 (no cap): a guessed absolute
      * value would deny fork() to every tool on a busy account. */
-    if (astools_sandbox_nproc_cap(&nproc) == ASTOOLS_OK)
+    if (astools_sandbox_nproc_cap(&nproc, NULL) == ASTOOLS_OK)
       out->limit_nproc = nproc;
   }
 #endif
@@ -668,15 +668,17 @@ void astools_sandbox_cleanup(astools_ctx *c, astools_sandbox_setup *s,
 
 /* ---- process cap ---------------------------------------------- */
 
-astools_err astools_sandbox_nproc_cap(int64_t *out) {
+astools_err astools_sandbox_nproc_cap(int64_t *out, int64_t *observed) {
   int64_t used = 0;
   astools_err e;
   if (!out) return ASTOOLS_ERR_INVALID;
   *out = 0;
+  if (observed) *observed = -1;
   e = os_proc_user_tasks(&used);
   if (e != ASTOOLS_OK) return e;
   if (used < 0) used = 0;
   if (used > INT64_MAX - ASTOOLS_NPROC_HEADROOM) return ASTOOLS_ERR_UNSUPPORTED;
+  if (observed) *observed = used;
   *out = used + ASTOOLS_NPROC_HEADROOM;
   return ASTOOLS_OK;
 }
@@ -697,7 +699,7 @@ astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out) {
    * without it no RLIMIT_NPROC is applied, so claiming the cap would lie. */
   {
     int64_t nproc_cap = 0;
-    if (astools_sandbox_nproc_cap(&nproc_cap) == ASTOOLS_OK)
+    if (astools_sandbox_nproc_cap(&nproc_cap, NULL) == ASTOOLS_OK)
       out->process_cap = 1;
   }
 #endif

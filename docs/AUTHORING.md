@@ -111,3 +111,6 @@ Versioning discipline: within a major version, only add new commands, new option
 
 See [persistent runtime](persistent-runtime.md) for ordered process exchanges,
 sandbox lifetime, replacement semantics and cancellation limits.
+
+For optional C/C++ semantic tools, use the [closed LSP adapter](lsp.md). It requires
+`runtime.protocol: "lsp"`; an LSP process does not speak `#tool_hello`.

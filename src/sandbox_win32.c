@@ -440,9 +440,10 @@ void astools_sandbox_cleanup(astools_ctx *c, astools_sandbox_setup *s,
 
 /* ---- process cap ---------------------------------------------- */
 
-astools_err astools_sandbox_nproc_cap(int64_t *out) {
+astools_err astools_sandbox_nproc_cap(int64_t *out, int64_t *observed) {
   /* The per-uid task count has no Windows analogue; prepare() sets the
    * per-tree Job Object cap directly instead. */
+  if (observed) *observed = -1;
   if (out) *out = 0;
   return ASTOOLS_ERR_UNSUPPORTED;
 }

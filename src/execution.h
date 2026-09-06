@@ -27,6 +27,10 @@ struct astools_pproc {
   int64_t backoff_ms, next_restart_mono;
   int64_t idle_timeout_ms;
   astools_buf pending; /* unconsumed stdout bytes between reads */
+  int lsp_serial;
+  unsigned lsp_capabilities;
+  char lsp_provider[256];
+  char lsp_error[512]; /* One exclusive exchange; never the context's last result. */
   /* PP_KIND_LIB */
   os_dylib lib;
   const astools_tool_vtable *vt;
@@ -51,4 +55,10 @@ astools_err astools_pp_ensure_alive(astools_ctx *c, const astools_tool *t,
                                     const astools_effective *eff, astools_pproc *p,
                                     int64_t deadline, astools_task *cancel, astools_result *r);
 astools_err astools_pp_validate(astools_ctx *c, const astools_tool *t);
+/* LSP framing uses the same bounded pipes, deadlines and cancellation. */
+astools_err astools_pp_take_frame(astools_buf *buffer, size_t cap, char **out, size_t *len);
+astools_err astools_pp_read_frame(astools_ctx *c, astools_pproc *p, int64_t deadline,
+                                  astools_task *cancel, char **out, size_t *len, int *why);
+astools_err astools_pp_write_frame(astools_ctx *c, astools_pproc *p, const char *json,
+                                   int64_t deadline, astools_task *cancel, int *why);
 #endif

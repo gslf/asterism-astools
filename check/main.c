@@ -14,14 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * --plugin-lint parses two small JSON files. astools-check links only
- * libastools, which is xCDN-only by design; the project's one JSON codec
- * lives in mcp/json.c (built into astools-mcp). Reusing it by textual
- * inclusion keeps the lint dependency-honest: one in-house strict codec,
- * no second hand-rolled parser, no build-system change.
- */
-#include "../mcp/json.c"
+/* Plugin lint shares the runtime transport codec. */
+#include "json.h"
 
 /* ---- shared helpers ------------------------------------------------------ */
 

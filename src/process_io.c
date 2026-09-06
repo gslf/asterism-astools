@@ -1,6 +1,11 @@
 /* process io — runtime implementation. */
 #include "execution.h"
 
+static size_t payload_limit(const astools_ctx *c) {
+  uint64_t n = c->cfg.max_output_bytes > 0 ? (uint64_t)c->cfg.max_output_bytes : 1048576u;
+  return n > SIZE_MAX - 8192 ? SIZE_MAX - 8192 : (size_t)n;
+}
+
 /* Detach the first '\n'-terminated line from b (newline consumed, not
  * included). BUSY means incomplete input; allocation failure stays explicit. */
 static astools_err pp_take_line(astools_buf *b, char **out, size_t *out_len) {
@@ -23,10 +28,10 @@ static astools_err pp_take_line(astools_buf *b, char **out, size_t *out_len) {
 /* Read one complete line from the child's stdout (compact responses are
  * single lines). ASTOOLS_ERR_TOOL distinguishes crash vs flood via
  * *why. Stderr is drained and dropped to keep the child from blocking. */
-astools_err astools_pp_read_line(astools_ctx *c, astools_pproc *p, int64_t deadline_mono,
+static astools_err read_message(astools_ctx *c, astools_pproc *p, int framed, int64_t deadline_mono,
                                  astools_task *cancel_task, char **out_line, size_t *out_len,
                                  int *why) {
-  int64_t cap = c->cfg.max_output_bytes > 0 ? c->cfg.max_output_bytes + 4096 : (int64_t)1048576;
+  size_t cap = payload_limit(c) + 8192;
   *why = PP_WHY_NONE;
   *out_line = NULL;
   *out_len = 0;
@@ -35,8 +40,12 @@ astools_err astools_pp_read_line(astools_ctx *c, astools_pproc *p, int64_t deadl
     int64_t now, slice;
     if (astools_task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     if (astools_mono(c) >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
-    astools_err buffered = pp_take_line(&p->pending, out_line, out_len);
-    if (buffered != ASTOOLS_ERR_BUSY) return buffered;
+    astools_err buffered = framed ? astools_pp_take_frame(&p->pending, payload_limit(c), out_line, out_len) :
+                                    pp_take_line(&p->pending, out_line, out_len);
+    if (buffered != ASTOOLS_ERR_BUSY) {
+      if (buffered == ASTOOLS_ERR_TOOL) *why = PP_WHY_OVERFLOW;
+      return buffered;
+    }
     if (astools_task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     now = astools_mono(c);
     if (now >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
@@ -61,7 +70,7 @@ astools_err astools_pp_read_line(astools_ctx *c, astools_pproc *p, int64_t deadl
       }
       if (re == ASTOOLS_OK) {
         if (astools_buf_append(&p->pending, tmp, got) != ASTOOLS_OK) return ASTOOLS_ERR_NOMEM;
-        if ((int64_t)p->pending.len > cap) {
+        if (p->pending.len > cap) {
           *why = PP_WHY_OVERFLOW;
           return ASTOOLS_ERR_TOOL;
         }
@@ -78,11 +87,11 @@ astools_err astools_pp_read_line(astools_ctx *c, astools_pproc *p, int64_t deadl
 }
 
 /* Write text (+ terminating newline when missing) to the child's stdin. */
-astools_err astools_pp_write_all(astools_ctx *c, astools_pproc *p, const char *text,
+static astools_err write_message(astools_ctx *c, astools_pproc *p, const char *text, size_t len, int newline,
                                  int64_t deadline_mono, astools_task *cancel_task, int *why) {
-  size_t len = strlen(text), off = 0;
-  int nl_done = (len > 0 && text[len - 1] == '\n');
-  int64_t cap = c->cfg.max_output_bytes > 0 ? c->cfg.max_output_bytes + 4096 : (int64_t)1048576;
+  size_t off = 0;
+  int nl_done = !newline || (len > 0 && text[len - 1] == '\n');
+  size_t cap = payload_limit(c) + 8192;
   *why = PP_WHY_NONE;
   while (off < len || !nl_done) {
     unsigned ready = 0;
@@ -112,7 +121,7 @@ astools_err astools_pp_write_all(astools_ctx *c, astools_pproc *p, const char *t
       }
       if (re == ASTOOLS_OK && got > 0) {
         if (astools_buf_append(&p->pending, tmp, got) != ASTOOLS_OK) return ASTOOLS_ERR_NOMEM;
-        if ((int64_t)p->pending.len > cap) {
+        if (p->pending.len > cap) {
           *why = PP_WHY_OVERFLOW;
           return ASTOOLS_ERR_TOOL;
         }
@@ -137,4 +146,30 @@ astools_err astools_pp_write_all(astools_ctx *c, astools_pproc *p, const char *t
     }
   }
   return ASTOOLS_OK;
+}
+
+
+astools_err astools_pp_read_line(astools_ctx *c, astools_pproc *p, int64_t deadline,
+                                 astools_task *cancel, char **out, size_t *len, int *why) {
+  return read_message(c, p, 0, deadline, cancel, out, len, why);
+}
+
+astools_err astools_pp_read_frame(astools_ctx *c, astools_pproc *p, int64_t deadline,
+                                  astools_task *cancel, char **out, size_t *len, int *why) {
+  return read_message(c, p, 1, deadline, cancel, out, len, why);
+}
+
+astools_err astools_pp_write_all(astools_ctx *c, astools_pproc *p, const char *text,
+                                 int64_t deadline, astools_task *cancel, int *why) {
+  return write_message(c, p, text, strlen(text), 1, deadline, cancel, why);
+}
+
+astools_err astools_pp_write_frame(astools_ctx *c, astools_pproc *p, const char *json,
+                                   int64_t deadline, astools_task *cancel, int *why) {
+  char header[80];
+  size_t len = strlen(json);
+  int n = snprintf(header, sizeof header, "Content-Length: %zu\r\n\r\n", len);
+  if (n < 0 || (size_t)n >= sizeof header) return ASTOOLS_ERR_TOOL;
+  astools_err e = write_message(c, p, header, (size_t)n, 0, deadline, cancel, why);
+  return e == ASTOOLS_OK ? write_message(c, p, json, len, 0, deadline, cancel, why) : e;
 }

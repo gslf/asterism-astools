@@ -1,5 +1,6 @@
 /* process exchange — runtime implementation. */
 #include "execution.h"
+#include "lsp.h"
 
 static void pp_cancel_and_settle(astools_ctx *c, astools_pproc *p, const char *invocation_id) {
   char *cl = astools_proto_cancel(invocation_id);
@@ -54,6 +55,20 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t, const astoo
   e = astools_pp_ensure_alive(c, t, eff, p, deadline_mono, cancel_task, r);
   if (e != ASTOOLS_OK) goto out;
   *sandbox_level = p->setup.level;
+  if (t->m->protocol == ASTOOLS_PROTOCOL_LSP) {
+    e = astools_lsp_invoke(c, p, cmd, args, eff, deadline_mono, cancel_task, r);
+    if (e != ASTOOLS_OK) {
+      /* No pending replies or open documents survive an uncertain exchange. */
+      astools_pp_stop(c, p, false);
+      const char *detail = e == ASTOOLS_ERR_BUSY ? "Source or referenced content changed; reopen the file before retrying" :
+                           e == ASTOOLS_ERR_INVALID ? "Invalid file, SHA-256 or UTF-8 source position" :
+                           e == ASTOOLS_ERR_UNSUPPORTED ? "The server or file does not support this semantic operation" :
+                           e == ASTOOLS_ERR_TIMEOUT ? "Deadline expired without a current, correlated semantic result" :
+                           astools_err_name(e);
+      astools_exec_result_set(r, "astools/lsp-query", "%s", p->lsp_error[0] ? p->lsp_error : detail);
+    }
+    goto out;
+  }
   astools_time wall = astools_clock_now(&c->clock) + (deadline_mono - astools_mono(c) + 999) / 1000;
   e = astools_proto_request(t, cmd, args, invocation_id, wall, c->cfg.max_output_bytes, eff,
                             c->workspace, p->setup.scratch_dir, &request_text);

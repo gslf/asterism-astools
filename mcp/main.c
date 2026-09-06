@@ -839,8 +839,8 @@ static void handle_tools_call(mcp_server *s, const jx_value *id,
   if (e != ASTOOLS_OK) {
     /* Engine failure: JSON-RPC error, never conflated with tool
      * failure. */
+    reply_error(id, -32000, res.error_message ? res.error_message : astools_err_name(e), err_data(e));
     astools_result_free(&res);
-    reply_engine_error(s, id, e);
     return;
   }
 

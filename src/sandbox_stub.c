@@ -47,8 +47,9 @@ astools_err astools_sandbox_caps_impl(int strict, astools_sandbox_caps *out) {
   return ASTOOLS_ERR_UNSUPPORTED;
 }
 
-astools_err astools_sandbox_nproc_cap(int64_t *out) {
+astools_err astools_sandbox_nproc_cap(int64_t *out, int64_t *observed) {
   /* Windows bounds processes with a Job Object, not a per-uid rlimit. */
+  if (observed) *observed = -1;
   if (out) *out = 0;
   return ASTOOLS_ERR_UNSUPPORTED;
 }

@@ -1,7 +1,7 @@
 # tests/CMakeLists.txt — astools unit + integration tests.
 #
 # Every test_*.c is a standalone executable over astools_static (+xcdn).
-# test_json additionally compiles mcp/json.c; test_regex compiles
+# test_json uses the shared transport codec; test_regex compiles
 # std/regex.c. tool_fake is the scripted protocol tool driven by
 # test_invoke / test_escape via the ASTOOLS_TEST_TOOL_PATH definition.
 
@@ -21,6 +21,8 @@ set(ASTOOLS_TESTS
   test_catalog
   test_discovery
   test_project_receipt
+  test_process_frame
+  test_lsp_files
   test_sandbox
   test_invoke
   test_escape
@@ -49,9 +51,6 @@ foreach(t ${ASTOOLS_TESTS})
   if(t IN_LIST ASTOOLS_TESTS_WITH_FAKES)
     list(APPEND t_sources fakes.c)
   endif()
-  if(t STREQUAL "test_json")
-    list(APPEND t_sources ${CMAKE_CURRENT_SOURCE_DIR}/../mcp/json.c)
-  endif()
   if(t STREQUAL "test_regex")
     list(APPEND t_sources ${CMAKE_CURRENT_SOURCE_DIR}/../std/regex.c)
   endif()
@@ -67,8 +66,6 @@ foreach(t ${ASTOOLS_TESTS})
   add_test(NAME ${t} COMMAND ${t})
 endforeach()
 
-target_include_directories(test_json PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../mcp)
 target_include_directories(test_regex PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../std)
 
@@ -160,4 +157,45 @@ if(NOT WIN32)
   add_dependencies(test_library tool_library)
   add_test(NAME test_library COMMAND test_library)
   set_tests_properties(test_library PROPERTIES TIMEOUT 20 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
+endif()
+
+if(NOT WIN32 AND NOT ASTOOLS_NO_THREADS)
+  add_executable(tool_lsp tools/tool_lsp.c)
+  target_include_directories(tool_lsp PRIVATE ../src)
+  target_compile_options(tool_lsp PRIVATE ${ASTOOLS_C_FLAGS})
+  target_link_libraries(tool_lsp PRIVATE astools_static)
+  add_executable(test_lsp test_lsp.c fakes.c)
+  target_include_directories(test_lsp PRIVATE . ../include ../src ../deps/xcdn-c/src)
+  target_compile_options(test_lsp PRIVATE ${ASTOOLS_C_FLAGS})
+  target_compile_definitions(test_lsp PRIVATE "ASTOOLS_TEST_LSP_PATH=\"$<TARGET_FILE:tool_lsp>\"")
+  target_link_libraries(test_lsp PRIVATE astools_static xcdn)
+  add_dependencies(test_lsp tool_lsp)
+  add_test(NAME test_lsp COMMAND test_lsp)
+  set_tests_properties(test_lsp PROPERTIES TIMEOUT 30 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
+endif()
+
+if(NOT WIN32 AND NOT ASTOOLS_NO_THREADS)
+  find_program(ASTOOLS_CLANGD_TEST_EXECUTABLE NAMES clangd)
+  if(ASTOOLS_CLANGD_TEST_EXECUTABLE)
+    add_executable(test_lsp_clangd test_lsp_clangd.c fakes.c)
+    target_include_directories(test_lsp_clangd PRIVATE . ../include ../src ../deps/xcdn-c/src)
+    target_compile_options(test_lsp_clangd PRIVATE ${ASTOOLS_C_FLAGS})
+    target_compile_definitions(test_lsp_clangd PRIVATE "ASTOOLS_CLANGD_PATH=\"${ASTOOLS_CLANGD_TEST_EXECUTABLE}\"")
+    target_link_libraries(test_lsp_clangd PRIVATE astools_static xcdn)
+    add_test(NAME test_lsp_clangd COMMAND test_lsp_clangd)
+    set_tests_properties(test_lsp_clangd PROPERTIES TIMEOUT 45 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
+  else()
+    message(STATUS "clangd unavailable: real LSP conformance test skipped")
+  endif()
+endif()
+
+if(TARGET test_lsp_clangd AND TARGET astools-check AND TARGET astools-mcp)
+  find_package(Python3 3.11 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME test_lsp_package COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_lsp_package.py
+      --checker $<TARGET_FILE:astools-check> --mcp $<TARGET_FILE:astools-mcp> --clangd ${ASTOOLS_CLANGD_TEST_EXECUTABLE})
+    set_tests_properties(test_lsp_package PROPERTIES TIMEOUT 45 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
+  else()
+    message(STATUS "Python 3.11 unavailable: optional clangd package smoke test skipped")
+  endif()
 endif()
