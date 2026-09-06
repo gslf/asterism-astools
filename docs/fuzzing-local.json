@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "core_revision": "0174cfa4006a197c9daa2344dff0ea81490bfa54",
+  "xcdn_revision": "3f00d766ceef07f3bb301abb59068e76bac653d3",
+  "compiler": "clang version 22.1.8",
+  "asan_options": "detect_leaks=0",
+  "ubsan_options": "halt_on_error=1",
+  "requested_seconds": 30,
+  "max_input_bytes": 16384,
+  "seed": 1,
+  "changed_sources_and_seeds": {
+    "CMakeLists.txt": "20d8cdcb2afe8a4d17e76429a0c17411952a9042612517a74c5af89e04851fc9",
+    "cmake/Fuzzing.cmake": "58708851a53c83e9545b68be15a5709e3fdef8b59c3ce969fa43a47591989912",
+    "src/sandbox_posix.c": "dd98366b655f52c2fdfe4006c64f5f082b921c9ddeea47469db2d0244842c578",
+    "fuzz/json.c": "d84f6f2073a3d41a23461d1c6228308d14586f165e6ae8d3ac5e18b0ec1749b5",
+    "fuzz/manifest.c": "756c8e3a75be501e0a9b955288b8e8db3600c9ea431d51533c98b4abdc6e27f9",
+    "fuzz/schema.c": "d0ee2ecfcf97a2cd6a22190fb30080c049182ad94152dc3413039e1bd0e27621",
+    "fuzz/corpus/json/scalars.json": "1bb5f0f25b8b2ced31e9d9ee03da86bfaf7def03ef18a3eee5383b1fb4158e86",
+    "fuzz/corpus/manifest/code.xcdn": "56add751fcfba7fb621564f7028a45b1ee1ef7b2adad7d63ccd674bba7459bf2",
+    "fuzz/corpus/manifest/duration-0": "a7defe1f24d4006fde37e82774dbc6f7e58ca89c6e54d8ec01135dccd0a2a3db",
+    "fuzz/corpus/manifest/duration-1": "753a467ceb4b0de3c87ae9fa7c38c9d6dc5cbe6332ba767a369db4185286318e",
+    "fuzz/corpus/manifest/duration-2": "a203f628b187f4d82d6a588416e8cfe21ceac4d2cf12a82a1ff9371d67620ad3",
+    "fuzz/corpus/manifest/duration-3": "581c1f20812a18645e0812405f1c0e8b8f7640bb197f0cddf241d1518b6df9c2",
+    "fuzz/corpus/manifest/duration-4": "02a86591d0ff4935f8665f6dda072a2902d585896afab207043ee3430bac8b0b",
+    "fuzz/corpus/manifest/duration-5": "edeed230cecbcfd61f68aff455182ebd5810d7e56c4f1c0542a5f84a87459403",
+    "fuzz/corpus/manifest/proc.xcdn": "f088bf1bc55e351faad6d1f98a3bbbff120b4ff374621b9ce198919fc514e661",
+    "fuzz/corpus/manifest/sys.xcdn": "5de169da1518e659c08d1aa2d2134a7a86b266e23f4a4acf1678b223ff33b586",
+    "fuzz/corpus/schema/0.json": "bbe5041743415ac0ef44959b76d580faec32ee3fd88dd32d705a86c0cd894236",
+    "fuzz/corpus/schema/1.json": "5f9d7de8f4d31e0ab9723fcff91b4dbc403aa07c06d35196632d87ec68462053",
+    "fuzz/corpus/schema/2.json": "108c204dc381080e8abd9c747e8d99906c8d59ea39be84884d9d4f53c5714999",
+    "fuzz/corpus/schema/3.json": "91e4308f53f3f28951b2dff68e5704eaf3ae0b996f4c02f8691703e0ea797596",
+    "fuzz/corpus/schema/4.json": "8036474b23c6a109e7078e6852675ba0db99a755fb1a9836234065ad59cc1fc2",
+    "fuzz/corpus/schema/5.json": "3da9ba1de5cc15d546845e0027cf2fc5037e189ee19bd2f73c709df4daa616c9",
+    "fuzz/corpus/schema/6.json": "3ffaae9c526e4def7c46c855c1864a600fc8a1e3637d75dba313e13f6444a7f6"
+  },
+  "runs": {
+    "json": {
+      "exit_code": 0,
+      "executions": 2494558,
+      "elapsed_seconds": 31,
+      "peak_rss_mb": 274,
+      "log_path": "/tmp/asterism-tools-fuzz-final-vgzz48bl/json.log",
+      "log_sha256": "22a24a3fd67d7c58d3c2e80493d0c061b997b4fa2f3698158a8dd9b51b3b4ae0",
+      "executable_sha256": "a12c7fbd8e8a4b6f37de00ac4a3a8963324e36b187504d7b20e730c4b6995911"
+    },
+    "manifest": {
+      "exit_code": 0,
+      "executions": 90851,
+      "elapsed_seconds": 31,
+      "peak_rss_mb": 281,
+      "log_path": "/tmp/asterism-tools-fuzz-final-vgzz48bl/manifest.log",
+      "log_sha256": "dfa10ca8fd93be3d12d560d8cc6c3e4fcbb199a8d1718f473682c601337892c1",
+      "executable_sha256": "dbf5b970223c83050bde1968bd7fbce4f17f02d896b22a75deee800a1211dfd1"
+    },
+    "schema": {
+      "exit_code": 0,
+      "executions": 1443811,
+      "elapsed_seconds": 31,
+      "peak_rss_mb": 265,
+      "log_path": "/tmp/asterism-tools-fuzz-final-vgzz48bl/schema.log",
+      "log_sha256": "0a2e5ee263f69d1b3f5a3bdb4261d951d29fb0c800299c48fec4b2f8e7d62f71",
+      "executable_sha256": "1eead0c013afea42f6006d78b235bb009583b49f1d6493d3d9900084985875c6"
+    }
+  }
+}

@@ -65,7 +65,8 @@ void astools_argv_free(char **argv) {
 
 /* ---- entry argv resolution ---------------------------------- */
 
-static int path_has_sep(const char *p) { return strchr(p, '/') != NULL; }
+/* Call the C99 functions: glibc's GNU generic macros require C11 under Clang. */
+static int path_has_sep(const char *p) { return (strchr)(p, '/') != NULL; }
 
 /* 1 when the path contains a ".." component (would escape pkg_dir). */
 static int path_has_dotdot(const char *p) {
@@ -152,7 +153,7 @@ static char *env_kv(const char *name, const char *value) {
  */
 static bool env_name_reserved(const char *name) {
   if (!name || name[0] == '\0') return true;
-  if (strchr(name, '=') != NULL) return true;
+  if ((strchr)(name, '=') != NULL) return true;
   if (strcmp(name, "PATH") == 0 || strcmp(name, "HOME") == 0 ||
       strcmp(name, "TMPDIR") == 0)
     return true;
@@ -201,7 +202,7 @@ static char *sandbox_jail_path(void) {
     free(p);
   }
   if (os_exe_path(&exe) != ASTOOLS_OK) return NULL;
-  slash = strrchr(exe, '/');
+  slash = (strrchr)(exe, '/');
   if (!slash) {
     free(exe);
     return NULL;

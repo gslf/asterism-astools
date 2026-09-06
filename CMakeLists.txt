@@ -10,6 +10,7 @@ option(ASTOOLS_BUILD_TESTS  "Build unit/integration tests"        ON)
 option(ASTOOLS_BUILD_PLUGIN "Emit the Agent Plugin package"       ON)
 option(ASTOOLS_NO_THREADS   "Single-threaded build (astools_tick)" OFF)
 option(ASTOOLS_SANITIZERS   "Enable ASan/UBSan"                   OFF)
+option(ASTOOLS_BUILD_FUZZERS "Build bounded parser fuzz targets (Clang)" OFF)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -182,6 +183,10 @@ foreach(tgt astools_static astools_shared)
     target_link_libraries(${tgt} PUBLIC ${CMAKE_DL_LIBS} m)
   endif()
 endforeach()
+
+if(ASTOOLS_BUILD_FUZZERS)
+  include(cmake/Fuzzing.cmake)
+endif()
 
 # ── astools-jail (POSIX helper, ships next to libastools) ─────────────
 if(NOT WIN32)

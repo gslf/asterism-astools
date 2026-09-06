@@ -10,6 +10,9 @@ Architecture and design: [docs/SPECS.md](docs/SPECS.md).
 capture limits and exact byte encodings. Fixed durations retain milliseconds
 through validation, manifest rendering and execution.
 
+[Parser fuzzing](docs/fuzzing.md) covers JSON, manifest/duration and MCP schema
+contracts with optional Clang targets (`ASTOOLS_BUILD_FUZZERS`, default OFF).
+
 
 ## What ships
 

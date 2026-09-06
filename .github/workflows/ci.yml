@@ -6,6 +6,36 @@ on:
   pull_request:
 
 jobs:
+  parser-fuzzing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [json, manifest, schema]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Configure instrumented parsers
+        run: cmake -B build-fuzz -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=RelWithDebInfo -DASTOOLS_BUILD_TESTS=OFF -DASTOOLS_BUILD_FUZZERS=ON
+      - name: Build selected target
+        run: cmake --build build-fuzz --target astools-fuzz-${{ matrix.target }} -j 4
+      - name: Fuzz bounded inputs
+        run: |
+          mkdir -p artifacts corpus
+          cp fuzz/corpus/${{ matrix.target }}/* corpus/
+          build-fuzz/astools-fuzz-${{ matrix.target }} -seed=1 -max_len=16384 -timeout=5 -max_total_time=30 -rss_limit_mb=512 -print_final_stats=1 -artifact_prefix=artifacts/ corpus
+      - name: Preserve failing inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-fuzz-${{ matrix.target }}
+          path: artifacts/
+          if-no-files-found: ignore
+
   build-test:
     strategy:
       fail-fast: false
