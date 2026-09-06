@@ -315,7 +315,17 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                               c->cfg.max_output_bytes, &eff, c->workspace,
                               lib_scratch, &req);
     if (e != ASTOOLS_OK) goto done;
-    e = astools_exec_library(c, t, req, out);
+    e = astools_exec_library(c, t, req, id, out);
+  } else if (t->m->mode == ASTOOLS_MODE_PERSISTENT) {
+#if defined(ASTOOLS_NO_THREADS)
+    e = astools_seterr(c, ASTOOLS_ERR_UNSUPPORTED, "persistent tools need threads");
+#else
+    if (c->no_threads)
+      e = astools_seterr(c, ASTOOLS_ERR_UNSUPPORTED, "persistent tools need threads");
+    else
+      e = astools_exec_persistent(c, t, cmd, args, &eff, id, deadline_mono,
+                                  cancel_task, out, &sb_level);
+#endif
   } else {
     e = astools_entry_resolve_argv(t, &argv);
     if (e != ASTOOLS_OK) goto done;
@@ -327,27 +337,10 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
                               c->cfg.max_output_bytes, &eff, c->workspace,
                               setup.scratch_dir, &req);
     if (e != ASTOOLS_OK) goto done;
-    if (t->m->mode == ASTOOLS_MODE_PERSISTENT) {
-#if defined(ASTOOLS_NO_THREADS)
-      e = astools_seterr(c, ASTOOLS_ERR_UNSUPPORTED,
-                         "persistent tools need threads "
-                         "(ASTOOLS_NO_THREADS build)");
-#else
-      if (c->no_threads)
-        e = astools_seterr(c, ASTOOLS_ERR_UNSUPPORTED,
-                           "persistent tools are unavailable in "
-                           "no-thread mode");
-      else
-        e = astools_exec_persistent(c, t, &setup, req, id, deadline_mono,
-                                    cancel_task, out);
-#endif
-    } else {
-      e = astools_exec_oneshot(c, &setup, req, id, deadline_mono,
-                               c->cfg.max_output_bytes,
-                               c->cfg.stderr_max_bytes, cancel_task, out,
-                               &exit_code, &stderr_cap);
-      out->exit_code = exit_code;
-    }
+    e = astools_exec_oneshot(c, &setup, req, id, deadline_mono,
+                             c->cfg.max_output_bytes, c->cfg.stderr_max_bytes,
+                             cancel_task, out, &exit_code, &stderr_cap);
+    out->exit_code = exit_code;
   }
 
   /* 6. result validation (step 7). */

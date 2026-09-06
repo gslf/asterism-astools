@@ -150,6 +150,7 @@ static void ctx_free(astools_ctx *c) {
   os_mutex_destroy(&c->slot_mu);
   os_cond_destroy(&c->slot_cv);
   os_mutex_destroy(&c->pp_mu);
+  os_cond_destroy(&c->pp_cv);
   os_mutex_destroy(&c->ev_mu);
   os_cond_destroy(&c->ev_cv);
   os_mutex_destroy(&c->err_mu);
@@ -175,6 +176,7 @@ astools_err astools_open(const astools_open_params *p, astools_ctx **out) {
   os_mutex_init(&c->slot_mu);
   os_cond_init(&c->slot_cv);
   os_mutex_init(&c->pp_mu);
+  os_cond_init(&c->pp_cv);
   os_mutex_init(&c->ev_mu);
   os_cond_init(&c->ev_cv);
   os_mutex_init(&c->err_mu);
@@ -680,6 +682,9 @@ astools_err astools_get_stats(astools_ctx *c, astools_stats *out) {
   os_mutex_lock(&c->slot_mu);
   out->active = (size_t)c->slots_used; out->queued = (size_t)c->slots_waiting;
   os_mutex_unlock(&c->slot_mu);
+  os_mutex_lock(&c->pp_mu);
+  out->instance_slots = c->pp_count; out->instance_waiters = c->pp_waiters;
+  os_mutex_unlock(&c->pp_mu);
   return ASTOOLS_OK;
 }
 

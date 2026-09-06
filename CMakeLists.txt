@@ -95,6 +95,13 @@ set(ASTOOLS_SOURCES
   src/proto.c
   src/invoke.c
   src/worker.c
+  src/execution_common.c
+  src/execution_oneshot.c
+  src/process_pool.c
+  src/process_io.c
+  src/process_start.c
+  src/process_exchange.c
+  src/execution_library.c
   src/execution_queue.c
   src/catalog.c
   src/selection.c

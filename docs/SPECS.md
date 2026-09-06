@@ -83,15 +83,12 @@ meaning changes from call to call.
 
 ## 6. Conversational interface
 
-The same registry can be projected in three catalog levels:
-
-- **Index:** tool and command names for discovery.
-- **Summary:** enough contract detail to select a command.
-- **Full:** parameter schemas, constraints and examples needed to call it.
-
-A character budget applies to the complete catalog. When space is tight,
-astools reduces detail across all tools before dropping tools, preserving broad
-discoverability.
+The [command selection](discovery.md) API ranks permitted candidates for a bounded
+intent and returns one immutable snapshot for catalog, GBNF and JSON Schema.
+Discovery can replace that selection when the needed command was omitted. Static
+policy excludes unavailable capabilities; argument-dependent checks still run
+before execution. The whole-registry index/summary/full catalog remains available
+to host applications, but its truncation is not a relevance guarantee.
 
 The compact native action syntax is one line:
 

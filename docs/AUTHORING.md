@@ -108,3 +108,6 @@ astools-check --approve mytool --root <root>   # record lockfile hashes
 ```
 
 Versioning discipline: within a major version, only add new commands, new optional params, widened constraints. Removing/renaming anything, adding a required param, or narrowing a type is also a major bump. Mark commands `deprecated: true` for at least one minor release first.
+
+See [persistent runtime](persistent-runtime.md) for ordered process exchanges,
+sandbox lifetime, replacement semantics and cancellation limits.

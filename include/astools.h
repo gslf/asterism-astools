@@ -28,8 +28,8 @@
 extern "C" {
 #endif
 
-#define ASTOOLS_VERSION "0.4.0"
-#define ASTOOLS_ABI_VERSION 4
+#define ASTOOLS_VERSION "0.5.0"
+#define ASTOOLS_ABI_VERSION 5
 int astools_abi_version(void);
 
 typedef struct astools_ctx astools_ctx;
@@ -230,6 +230,7 @@ typedef struct {
   size_t tools_total, tools_enabled, tools_unavailable;
   size_t invocations, ok, failed, denied, timeouts, cancelled;
   size_t active, queued; /* current slot use and waiting invocations */
+  size_t instance_slots, instance_waiters; /* retained process/library nodes (max 64), waiters */
   int64_t last_refresh_unix;    /* 0 = never */
   int64_t last_invocation_unix; /* 0 = never */
 } astools_stats;

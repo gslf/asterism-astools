@@ -20,7 +20,7 @@
  *   sandbox_posix.c env scrub, limits, seatbelt profile, jail
  *   proto.c         #tool_request/#tool_response build/parse
  *   invoke.c        the pipeline
- *   worker.c        oneshot exec, async tasks, persistent table, poll
+ *   worker.c        supervisor; execution/process modules own backends
  *   catalog.c       budgeted catalog rendering
  *   gbnf.c          GBNF export
  *   callline.c      CALL/RESULT/ERROR lines
@@ -654,17 +654,12 @@ astools_err astools_exec_oneshot(astools_ctx *c,
  * startup_timeout), send the request, wait for the matching response or
  * deadline (cancel + grace + kill/restart on overrun). */
 astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t,
-                                    const astools_sandbox_setup *setup,
-                                    const char *request_text,
-                                    const char *invocation_id,
-                                    int64_t deadline_mono,
-                                    astools_task *cancel_task,
-                                    astools_result *r);
+    const astools_cmd *cmd, const xcdn_node_t *args, const astools_effective *eff,
+    const char *invocation_id, int64_t deadline_mono, astools_task *cancel,
+    astools_result *out, int *sandbox_level);
 
-/* Library dispatch (kind "library"): dlopen once per tool, call
- * vtable->invoke on the calling thread. */
 astools_err astools_exec_library(astools_ctx *c, astools_tool *t,
-                                 const char *request_text,
+                                 const char *request_text, const char *invocation_id,
                                  astools_result *r);
 
 /* Supervisor lifecycle: registry poll + persistent idle reaping + async
@@ -769,6 +764,8 @@ struct astools_ctx {
   /* persistent processes (guarded by pp_mu; worker reaps idle) */
   astools_pproc *pprocs;
   os_mutex pp_mu;
+  os_cond pp_cv;
+  size_t pp_count, pp_waiters;
 
   /* supervisor */
   os_thread worker;

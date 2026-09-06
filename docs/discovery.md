@@ -46,7 +46,9 @@ refresh. A disabled command cannot execute through an older selection.
 
 The asynchronous call copies its reference and expected hash before returning,
 so the caller can free the selection immediately after submission. Queue waits
-observe cancellation and deadlines. `astools_get_stats` and the MCP stats resource
+observe cancellation and deadlines, including the per-instance wait of persistent
+tools. The [persistent runtime](persistent-runtime.md) retains each instance's sandbox
+and refuses stale executable reuse. `astools_get_stats` and the MCP stats resource
 report current active/queued counts. Validation, queue time and final identity
 checks consume the invocation deadline.
 
