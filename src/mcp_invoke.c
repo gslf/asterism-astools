@@ -22,15 +22,6 @@ astools_err astools_mcp_invoke(astools_ctx *c, astools_pproc *p, const astools_c
   p->rpc_error[0] = 0;
   jx_value *arguments = astools_mcp_arguments(args);
   if (!arguments) return ASTOOLS_ERR_INVALID;
-  jx_value *input = NULL;
-  if (jx_parse(cmd->mcp_input_schema, strlen(cmd->mcp_input_schema), &input) ||
-      !astools_mcp_schema_validate(input, arguments)) {
-    jx_free(input);
-    jx_free(arguments);
-    snprintf(p->rpc_error, sizeof p->rpc_error, "Arguments violate the reviewed MCP input schema");
-    return ASTOOLS_ERR_INVALID;
-  }
-  jx_free(input);
   astools_err e = astools_mcp_check_tool(c, p, cmd, deadline, cancel);
   if (e != ASTOOLS_OK) {
     jx_free(arguments);

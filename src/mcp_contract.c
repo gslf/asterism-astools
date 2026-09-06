@@ -110,3 +110,14 @@ static jx_value *arguments(const xcdn_node_t *node, unsigned depth) {
 jx_value *astools_mcp_arguments(const xcdn_node_t *node) {
   return arguments(node, 0);
 }
+
+/* Shared admission makes selection/batch validation as strict as actual dispatch. */
+astools_err astools_mcp_validate(astools_ctx *c, const astools_cmd *cmd, const xcdn_node_t *args) {
+  if (!cmd->mcp_input_schema) return ASTOOLS_OK;
+  jx_value *schema = NULL, *value = astools_mcp_arguments(args);
+  bool valid = value && !jx_parse(cmd->mcp_input_schema,strlen(cmd->mcp_input_schema),&schema) &&
+               astools_mcp_schema_validate(schema,value);
+  jx_free(schema); jx_free(value);
+  return valid ? ASTOOLS_OK : astools_seterr(c,ASTOOLS_ERR_INVALID,
+      "Arguments violate the reviewed MCP input schema or its JSON/resource limits");
+}

@@ -94,8 +94,9 @@ integer instance comparisons preserve their int64 values. Schema traversal allow
 entries. Validation allows 32,768 visited instance nodes and 64 levels.
 
 Input must declare an object root. Output can be any supported schema, including
-arrays, scalar types and boolean schemas. Arguments are validated before
-`tools/call`. A successful result with an output schema must carry matching
+arrays, scalar types and boolean schemas. Arguments are validated in the shared public/selection preflight, before process
+startup or `tools/call`. MCP preflight also applies host path policy before
+checking the captured schema, so batch admission sees the canonical arguments. A successful result with an output schema must carry matching
 `structuredContent`; provided structured content is checked even on tool errors.
 Dates, tags and other non-JSON xCDN extensions cannot pass through a lossy encoder.
 Broader interoperability needs a separately measured, complete 2020-12 validator.

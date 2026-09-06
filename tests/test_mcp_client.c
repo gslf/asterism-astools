@@ -208,6 +208,13 @@ TEST(input_schema_is_enforced_even_when_local_parameter_types_allow_the_value) {
   ASSERT_OK(astools_command_schemas(f.c, &schemas));
   ASSERT_TRUE(strstr(schemas, "allOf") && strstr(schemas, "maxLength"));
   free(schemas);
+  ASSERT_EQ_INT(astools_validate_args(f.c,"mcp","echo","{msg:\"too long\"}"),ASTOOLS_ERR_INVALID);
+  astools_selection *selection = NULL;
+  astools_discovery_options options = {0};
+  ASSERT_OK(astools_discover(f.c,&options,&selection));
+  ASSERT_EQ_INT(astools_selection_validate(selection,"mcp.echo","{msg:\"too long\"}"),ASTOOLS_ERR_INVALID);
+  astools_selection_free(selection);
+  ASSERT_TRUE(!f.c->pprocs);
   astools_result result = {0};
   ASSERT_EQ_INT(call(&f, 1500, &result), ASTOOLS_ERR_INVALID);
   ASSERT_TRUE(!result.ok && !marker(&f, "called"));

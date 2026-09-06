@@ -145,13 +145,14 @@ astools_err astools_validate_impl(astools_ctx *c, const char *ref,
   e = astools_args_validate(cmd, args, verr, sizeof verr);
   if (e != ASTOOLS_OK)
     e = astools_seterr(c, ASTOOLS_ERR_INVALID, "%s", verr);
-  if (e == ASTOOLS_OK && expected_sha256) {
+  if (e == ASTOOLS_OK && (expected_sha256 || cmd->mcp_name)) {
     astools_effective eff = {0}; char *deny = NULL;
     e = astools_policy_effective(c,t,&eff);
     if (e == ASTOOLS_OK) e = astools_policy_preflight(c,t,cmd,args,&eff,&deny);
     if (e == ASTOOLS_ERR_DENIED) astools_seterr(c,e,"%s",deny ? deny : "denied by policy");
     free(deny); astools_effective_free(&eff);
   }
+  if (e == ASTOOLS_OK) e = astools_mcp_validate(c,cmd,args);
 done:
   xcdn_document_free(doc);
   astools_tool_unref(t);
@@ -265,6 +266,9 @@ astools_err astools_invoke_impl(astools_ctx *c, const char *ref,
       goto done;
     }
   }
+
+  e = astools_mcp_validate(c,cmd,args);
+  if (e != ASTOOLS_OK) goto done;
 
   /* 4. deadline precedence: arg > command timeout > invocation.timeout. */
   dl_ms = deadline_ms > 0 ? (int64_t)deadline_ms

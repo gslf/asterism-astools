@@ -278,6 +278,7 @@ typedef struct astools_manifest {
 
 bool astools_lsp_manifest_valid(const astools_manifest *m);
 bool astools_mcp_command_parse(const astools_manifest *m, astools_cmd *cmd, const xcdn_node_t *binding);
+astools_err astools_mcp_validate(astools_ctx *c, const astools_cmd *cmd, const xcdn_node_t *args);
 
 /* Parse + schema-validate one manifest document. workspace expands
  * "${workspace}" in permission paths (may be NULL to leave verbatim).
