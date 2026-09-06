@@ -23,6 +23,7 @@ set(ASTOOLS_TESTS
   test_project_receipt
   test_process_frame
   test_lsp_files
+  test_mcp_contract
   test_sandbox
   test_invoke
   test_escape
@@ -80,6 +81,8 @@ set(ASTOOLS_TEST_ENV "ASTOOLS_TEST_TOOL=$<TARGET_FILE:tool_fake>")
 if(TARGET astools-jail)
   list(APPEND ASTOOLS_TEST_ENV "ASTOOLS_JAIL=$<TARGET_FILE:astools-jail>")
 endif()
+
+
 
 if(TARGET astools-mcp)
   add_test(NAME test_mcp_protocol
@@ -172,6 +175,18 @@ if(NOT WIN32 AND NOT ASTOOLS_NO_THREADS)
   add_dependencies(test_lsp tool_lsp)
   add_test(NAME test_lsp COMMAND test_lsp)
   set_tests_properties(test_lsp PROPERTIES TIMEOUT 30 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
+  add_executable(tool_mcp tools/tool_mcp.c)
+  target_include_directories(tool_mcp PRIVATE ../src)
+  target_compile_options(tool_mcp PRIVATE ${ASTOOLS_C_FLAGS})
+  target_link_libraries(tool_mcp PRIVATE astools_static)
+  add_executable(test_mcp_client test_mcp_client.c fakes.c)
+  target_include_directories(test_mcp_client PRIVATE . ../include ../src ../deps/xcdn-c/src)
+  target_compile_options(test_mcp_client PRIVATE ${ASTOOLS_C_FLAGS})
+  target_compile_definitions(test_mcp_client PRIVATE "ASTOOLS_TEST_MCP_PATH=\"$<TARGET_FILE:tool_mcp>\"")
+  target_link_libraries(test_mcp_client PRIVATE astools_static xcdn)
+  add_dependencies(test_mcp_client tool_mcp)
+  add_test(NAME test_mcp_client COMMAND test_mcp_client)
+  set_tests_properties(test_mcp_client PROPERTIES TIMEOUT 30 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
 endif()
 
 if(NOT WIN32 AND NOT ASTOOLS_NO_THREADS)
@@ -197,5 +212,14 @@ if(TARGET test_lsp_clangd AND TARGET astools-check AND TARGET astools-mcp)
     set_tests_properties(test_lsp_package PROPERTIES TIMEOUT 45 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
   else()
     message(STATUS "Python 3.11 unavailable: optional clangd package smoke test skipped")
+  endif()
+endif()
+
+if(TARGET tool_mcp AND TARGET astools-check AND TARGET astools-mcp)
+  find_package(Python3 3.11 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME test_mcp_package COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_mcp_package.py
+      --checker $<TARGET_FILE:astools-check> --mcp $<TARGET_FILE:astools-mcp> --server $<TARGET_FILE:tool_mcp>)
+    set_tests_properties(test_mcp_package PROPERTIES TIMEOUT 60 ENVIRONMENT "${ASTOOLS_TEST_ENV}")
   endif()
 endif()

@@ -35,7 +35,7 @@ static astools_err query(astools_ctx *c, astools_pproc *p, const char *command,
   int diagnostics = !strcmp(command, "diagnostics"),
       positional = !strcmp(command, "definition") || !strcmp(command, "references");
   if (!diagnostics && !(p->lsp_capabilities & capability)) return ASTOOLS_ERR_UNSUPPORTED;
-  if (p->lsp_serial >= INT32_MAX - 1) return ASTOOLS_ERR_TOOL;
+  if (p->rpc_serial >= INT32_MAX - 1) return ASTOOLS_ERR_TOOL;
   const char *dot = strrchr(file->path, '.');
   if (!dot ||
       (strcmp(dot, ".c") && strcmp(dot, ".h") && strcmp(dot, ".cc") && strcmp(dot, ".cpp") &&
@@ -51,7 +51,7 @@ static astools_err query(astools_ctx *c, astools_pproc *p, const char *command,
     return ASTOOLS_ERR_NOMEM;
   }
   jx_value *doc = jx_object_get(params, "textDocument");
-  int version = ++p->lsp_serial;
+  int version = ++p->rpc_serial;
   int bad = jx_object_set(doc, "version", jx_int(version));
   bad |= jx_object_set(doc, "languageId", jx_string(!strcmp(dot, ".c") ? "c" : "cpp"));
   bad |= jx_object_set(doc, "text", jx_string(file->text));
@@ -96,7 +96,7 @@ astools_err astools_lsp_invoke(astools_ctx *c, astools_pproc *p, const astools_c
                                const xcdn_node_t *args, const astools_effective *grants,
                                int64_t deadline, astools_task *cancel, astools_result *result) {
   astools_lsp_view view = {0};
-  p->lsp_error[0] = 0;
+  p->rpc_error[0] = 0;
   jx_value *reply = NULL, *output = NULL;
   view.ctx = c;
   view.grants = grants;

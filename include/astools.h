@@ -170,7 +170,7 @@ astools_err astools_call_format(astools_ctx *c, const char *ref,
 
 typedef struct astools_result_s {
   int      ok;            /* tool-level success                       */
-  char    *result_xcdn;   /* xCDN value; NULL when !ok                */
+  char    *result_xcdn;   /* xCDN value; may retain error/partial data when !ok */
   char    *error_code;    /* e.g. "fs/not-found"; NULL when ok        */
   char    *error_message; /* NULL when ok                             */
   int      exit_code;     /* executable tools; 0 otherwise            */

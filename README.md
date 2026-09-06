@@ -97,3 +97,8 @@ queue cancellation no longer waits for another invocation to release its slot.
 Optional [clangd semantic navigation](docs/lsp.md) adds symbols, definitions,
 references and versioned diagnostics through a managed LSP process. It uses the
 same host policy and package checks, with explicit coverage limits.
+
+Optional [reviewed MCP stdio packages](docs/mcp-client.md) call locally installed
+servers through the same supervisor. Host-owned bindings validate input/output
+schemas and retain complete error payloads. The current 2026-07-28 adapter has an
+explicitly restricted schema profile; remote metadata cannot grant capabilities.

@@ -380,6 +380,14 @@ astools_err astools_jschema_input(const astools_cmd *cmd, char **out_json) {
   e = astools_buf_appends(&b, "{\"type\":\"object\",");
   if (e == ASTOOLS_OK) e = object_body(&b, cmd->params, cmd->params_len, 0);
   if (e == ASTOOLS_OK) e = astools_buf_appendc(&b, '}');
+  if (e == ASTOOLS_OK && cmd->mcp_input_schema) {
+    astools_buf both = {0};
+    /* Both host types/path policy and the reviewed remote assertions apply. */
+    e = astools_buf_printf(&both, "{\"type\":\"object\",\"allOf\":[%s,%s]}",
+                           b.data, cmd->mcp_input_schema);
+    astools_buf_free(&b);
+    b = both;
+  }
   if (e != ASTOOLS_OK) {
     astools_buf_free(&b);
     return e;

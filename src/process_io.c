@@ -1,8 +1,9 @@
 /* process io — runtime implementation. */
 #include "execution.h"
 
-static size_t payload_limit(const astools_ctx *c) {
+static size_t payload_limit(const astools_ctx *c, const astools_pproc *p) {
   uint64_t n = c->cfg.max_output_bytes > 0 ? (uint64_t)c->cfg.max_output_bytes : 1048576u;
+  if (p->rpc_lines && n > 1048576u) n = 1048576u;
   return n > SIZE_MAX - 8192 ? SIZE_MAX - 8192 : (size_t)n;
 }
 
@@ -31,7 +32,7 @@ static astools_err pp_take_line(astools_buf *b, char **out, size_t *out_len) {
 static astools_err read_message(astools_ctx *c, astools_pproc *p, int framed, int64_t deadline_mono,
                                  astools_task *cancel_task, char **out_line, size_t *out_len,
                                  int *why) {
-  size_t cap = payload_limit(c) + 8192;
+  size_t cap = payload_limit(c,p) + 8192;
   *why = PP_WHY_NONE;
   *out_line = NULL;
   *out_len = 0;
@@ -40,7 +41,7 @@ static astools_err read_message(astools_ctx *c, astools_pproc *p, int framed, in
     int64_t now, slice;
     if (astools_task_cancelled(cancel_task)) return ASTOOLS_ERR_CANCELLED;
     if (astools_mono(c) >= deadline_mono) return ASTOOLS_ERR_TIMEOUT;
-    astools_err buffered = framed ? astools_pp_take_frame(&p->pending, payload_limit(c), out_line, out_len) :
+    astools_err buffered = framed ? astools_pp_take_frame(&p->pending, payload_limit(c,p), out_line, out_len) :
                                     pp_take_line(&p->pending, out_line, out_len);
     if (buffered != ASTOOLS_ERR_BUSY) {
       if (buffered == ASTOOLS_ERR_TOOL) *why = PP_WHY_OVERFLOW;
@@ -91,7 +92,7 @@ static astools_err write_message(astools_ctx *c, astools_pproc *p, const char *t
                                  int64_t deadline_mono, astools_task *cancel_task, int *why) {
   size_t off = 0;
   int nl_done = !newline || (len > 0 && text[len - 1] == '\n');
-  size_t cap = payload_limit(c) + 8192;
+  size_t cap = payload_limit(c,p) + 8192;
   *why = PP_WHY_NONE;
   while (off < len || !nl_done) {
     unsigned ready = 0;

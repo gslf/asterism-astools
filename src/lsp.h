@@ -2,7 +2,7 @@
 #ifndef ASTOOLS_LSP_H
 #define ASTOOLS_LSP_H
 #include "execution.h"
-#include "json.h"
+#include "rpc.h"
 #define LSP_FILE_BYTES (1024u * 1024u)
 #define LSP_RESULTS 128u
 #define LSP_SYMBOLS 1u
@@ -21,15 +21,11 @@ astools_err astools_lsp_file_read(const char *root, const char *path,
                                   const astools_effective *grants, astools_lsp_file *out);
 void astools_lsp_file_free(astools_lsp_file *file);
 int astools_lsp_offset(const astools_lsp_file *file, const jx_value *position, size_t *out);
-const char *astools_lsp_string(const jx_value *object, const char *key);
-/* send/request take ownership of params, including on failure. */
-astools_err astools_lsp_send(astools_ctx *c, astools_pproc *p, int id, const char *method,
-                             jx_value *params, int64_t deadline, astools_task *cancel);
+#define astools_lsp_string astools_rpc_string
+#define astools_lsp_send astools_rpc_send
+#define astools_lsp_request astools_rpc_request
 astools_err astools_lsp_receive(astools_ctx *c, astools_pproc *p, int id, const char *uri,
                                 int version, int64_t deadline, astools_task *cancel,
-                                jx_value **out);
-astools_err astools_lsp_request(astools_ctx *c, astools_pproc *p, const char *method,
-                                jx_value *params, int64_t deadline, astools_task *cancel,
                                 jx_value **out);
 astools_err astools_lsp_initialize(astools_ctx *c, astools_pproc *p, int64_t deadline,
                                    astools_task *cancel);

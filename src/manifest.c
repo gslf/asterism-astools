@@ -401,6 +401,7 @@ static void free_cmd_members(astools_cmd *c) {
   size_t i;
   if (!c) return;
   free(c->name);
+  free(c->mcp_name); free(c->mcp_input_schema); free(c->mcp_output_schema);
   free(c->summary);
   free(c->description);
   if (c->params) {
@@ -704,14 +705,15 @@ static bool parse_runtime(astools_manifest *m, const xcdn_value_t *obj,
     const char *s = node_str(n);
     if (s && !strcmp(s, "astools")) m->protocol = ASTOOLS_PROTOCOL_NATIVE;
     else if (s && !strcmp(s, "lsp")) m->protocol = ASTOOLS_PROTOCOL_LSP;
+    else if (s && !strcmp(s, "mcp")) m->protocol = ASTOOLS_PROTOCOL_MCP;
     else {
-      set_err(err_msg, "manifest: runtime.protocol must be astools or lsp");
+      set_err(err_msg, "manifest: runtime.protocol must be astools, lsp or mcp");
       return false;
     }
   }
-  if (m->protocol == ASTOOLS_PROTOCOL_LSP &&
+  if (m->protocol != ASTOOLS_PROTOCOL_NATIVE &&
       (m->kind != ASTOOLS_KIND_EXECUTABLE || m->mode != ASTOOLS_MODE_PERSISTENT)) {
-    set_err(err_msg, "manifest: lsp requires an executable persistent runtime");
+    set_err(err_msg, "manifest: lsp/mcp requires an executable persistent runtime");
     return false;
   }
 
@@ -1058,6 +1060,10 @@ static bool parse_command(const astools_manifest *m, astools_cmd *c,
   if (!get_opt_bool(co, "deprecated", &c->deprecated)) {
     set_err(err_msg, "manifest: command '%s': deprecated must be a bool",
             c->name);
+    return false;
+  }
+  if (!astools_mcp_command_parse(m,c,xcdn_object_get(co,"mcp"))) {
+    set_err(err_msg,"manifest: MCP command '%s' needs a valid binding, supported reviewed schemas and disabled idempotent caching",c->name);
     return false;
   }
 
@@ -1589,7 +1595,8 @@ static xcdn_node_t *render_runtime(const astools_manifest *m) {
   size_t i;
   if (!n) return NULL;
   o = n->value;
-  if (!obj_put_str(o, "protocol", m->protocol == ASTOOLS_PROTOCOL_LSP ? "lsp" : "astools"))
+  if (!obj_put_str(o, "protocol", m->protocol == ASTOOLS_PROTOCOL_LSP ? "lsp" :
+      m->protocol == ASTOOLS_PROTOCOL_MCP ? "mcp" : "astools"))
     goto fail;
   if (!obj_put_str(o, "mode", m->mode == ASTOOLS_MODE_PERSISTENT
                                   ? "persistent"
@@ -1665,6 +1672,16 @@ static xcdn_node_t *render_command(const astools_cmd *c) {
   if (!n) return NULL;
   o = n->value;
   if (!obj_put_str(o, "name", c->name)) goto fail;
+  if (c->mcp_name) {
+    xcdn_node_t *binding = tagged_obj_node(NULL);
+    if (!binding) goto fail;
+    if (!obj_put_str(binding->value,"name",c->mcp_name) ||
+        !obj_put_str(binding->value,"input_schema",c->mcp_input_schema) ||
+        (c->mcp_output_schema && !obj_put_str(binding->value,"output_schema",c->mcp_output_schema)) ||
+        !obj_append_checked(o,"mcp",binding)) {
+      xcdn_node_free(binding); goto fail;
+    }
+  }
   if (!obj_put_str(o, "summary", c->summary)) goto fail;
   if (c->description && !obj_put_str(o, "description", c->description))
     goto fail;

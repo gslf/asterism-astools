@@ -96,6 +96,10 @@ void astools_pp_release(astools_ctx *c, astools_pproc *p) {
 /* Stop/reap the leader and its remaining process group before deleting scratch. */
 void astools_pp_stop(astools_ctx *c, astools_pproc *p, bool graceful) {
   int ec = 0;
+  if (graceful && p->rpc_lines) {
+    os_proc_close_stdin(&p->proc);
+    if (os_proc_wait(&p->proc,200,&ec) == ASTOOLS_OK) graceful = false;
+  }
   if (graceful) {
     os_proc_terminate(&p->proc);
     if (os_proc_wait(&p->proc, 2000, &ec) != ASTOOLS_OK) {

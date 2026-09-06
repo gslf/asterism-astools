@@ -1,6 +1,7 @@
 /* process exchange — runtime implementation. */
 #include "execution.h"
 #include "lsp.h"
+#include "mcp_client.h"
 
 static void pp_cancel_and_settle(astools_ctx *c, astools_pproc *p, const char *invocation_id) {
   char *cl = astools_proto_cancel(invocation_id);
@@ -55,6 +56,14 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t, const astoo
   e = astools_pp_ensure_alive(c, t, eff, p, deadline_mono, cancel_task, r);
   if (e != ASTOOLS_OK) goto out;
   *sandbox_level = p->setup.level;
+  if (t->m->protocol == ASTOOLS_PROTOCOL_MCP) {
+    e = astools_mcp_invoke(c,p,cmd,args,deadline_mono,cancel_task,r);
+    if (e != ASTOOLS_OK) {
+      astools_pp_stop(c,p,false);
+      astools_exec_result_set(r,"astools/mcp-query","%s",p->rpc_error[0] ? p->rpc_error : astools_err_name(e));
+    }
+    goto out;
+  }
   if (t->m->protocol == ASTOOLS_PROTOCOL_LSP) {
     e = astools_lsp_invoke(c, p, cmd, args, eff, deadline_mono, cancel_task, r);
     if (e != ASTOOLS_OK) {
@@ -65,7 +74,7 @@ astools_err astools_exec_persistent(astools_ctx *c, astools_tool *t, const astoo
                            e == ASTOOLS_ERR_UNSUPPORTED ? "The server or file does not support this semantic operation" :
                            e == ASTOOLS_ERR_TIMEOUT ? "Deadline expired without a current, correlated semantic result" :
                            astools_err_name(e);
-      astools_exec_result_set(r, "astools/lsp-query", "%s", p->lsp_error[0] ? p->lsp_error : detail);
+      astools_exec_result_set(r, "astools/lsp-query", "%s", p->rpc_error[0] ? p->rpc_error : detail);
     }
     goto out;
   }

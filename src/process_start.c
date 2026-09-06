@@ -1,6 +1,7 @@
 /* process start — runtime implementation. */
 #include "execution.h"
 #include "lsp.h"
+#include "mcp_client.h"
 
 /* Spawn + #tool_hello handshake, honoring the crash backoff window. */
 astools_err astools_pp_ensure_alive(astools_ctx *c, const astools_tool *t,
@@ -71,12 +72,15 @@ astools_err astools_pp_ensure_alive(astools_ctx *c, const astools_tool *t,
   int64_t now = astools_mono(c);
   int64_t startup = t->m->startup_timeout_ms > 0 ? t->m->startup_timeout_ms : 10000;
   hello_deadline = startup < deadline_mono - now ? now + startup : deadline_mono;
-  if (t->m->protocol == ASTOOLS_PROTOCOL_LSP) {
-    e = astools_lsp_initialize(c, p, hello_deadline, cancel_task);
+  if (t->m->protocol != ASTOOLS_PROTOCOL_NATIVE) {
+    e = t->m->protocol == ASTOOLS_PROTOCOL_MCP ?
+        astools_mcp_initialize(c, p, hello_deadline, cancel_task) :
+        astools_lsp_initialize(c, p, hello_deadline, cancel_task);
     if (e != ASTOOLS_OK) {
       astools_pp_stop(c, p, false);
       astools_pp_backoff(c, p);
-      astools_exec_result_set(r, "astools/lsp-startup", "%s", p->lsp_error[0] ? p->lsp_error : astools_err_name(e));
+      astools_exec_result_set(r, t->m->protocol == ASTOOLS_PROTOCOL_MCP ? "astools/mcp-startup" : "astools/lsp-startup",
+          "%s", p->rpc_error[0] ? p->rpc_error : astools_err_name(e));
       return e;
     }
     p->alive = p->hello_done = true;

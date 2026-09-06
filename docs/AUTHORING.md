@@ -114,3 +114,7 @@ sandbox lifetime, replacement semantics and cancellation limits.
 
 For optional C/C++ semantic tools, use the [closed LSP adapter](lsp.md). It requires
 `runtime.protocol: "lsp"`; an LSP process does not speak `#tool_hello`.
+
+For reviewed remote tool bindings, use the [MCP stdio client](mcp-client.md).
+It requires a persistent executable with `runtime.protocol: "mcp"`, captured
+supported schemas, and explicit local commands and permissions.

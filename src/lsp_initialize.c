@@ -24,10 +24,11 @@ astools_err astools_lsp_initialize(astools_ctx *c, astools_pproc *p, int64_t dea
       "\"definition\":{\"linkSupport\":true},\"publishDiagnostics\":{\"versionSupport\":true}}}";
   jx_value *params = jx_object(), *caps = NULL, *options = jx_object(), *reply = NULL;
   char *uri = astools_lsp_uri(c->workspace);
-  p->lsp_serial = 0;
+  p->rpc_serial = 0;
+  p->rpc_lines = false;
   p->lsp_capabilities = 0;
   p->lsp_provider[0] = 0;
-  p->lsp_error[0] = 0;
+  p->rpc_error[0] = 0;
   int bad = !params || !options || !uri || jx_parse(capabilities, sizeof capabilities - 1, &caps);
   bad |= jx_object_set(params, "processId", jx_null());
   bad |= jx_object_set(params, "rootUri", jx_string(uri ? uri : ""));

@@ -858,7 +858,9 @@ static void handle_tools_call(mcp_server *s, const jx_value *id,
       reply_error(id, -32603, "out of memory", NULL);
       return;
     }
-    reply_call_text(id, tb.data, 1);
+    /* An adapter may retain an exact bounded failure envelope. Do not discard
+     * it when crossing a second MCP hop; it remains untrusted result data. */
+    reply_call_text(id, res.result_xcdn ? res.result_xcdn : tb.data, 1);
     astools_buf_free(&tb);
   }
   astools_result_free(&res);

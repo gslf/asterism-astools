@@ -105,6 +105,14 @@ set(ASTOOLS_SOURCES
   src/lsp_uri.c
   src/lsp_file.c
   src/lsp_rpc.c
+  src/rpc.c
+  src/mcp_contract.c
+  src/mcp_request.c
+  src/mcp_schema_profile.c
+  src/mcp_schema_validate.c
+  src/mcp_initialize.c
+  src/mcp_discovery.c
+  src/mcp_invoke.c
   src/lsp_initialize.c
   src/lsp_results.c
   src/lsp_query.c

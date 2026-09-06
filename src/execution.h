@@ -27,10 +27,12 @@ struct astools_pproc {
   int64_t backoff_ms, next_restart_mono;
   int64_t idle_timeout_ms;
   astools_buf pending; /* unconsumed stdout bytes between reads */
-  int lsp_serial;
+  int rpc_serial;
+  bool rpc_lines; /* MCP newline framing; LSP uses Content-Length. */
+  unsigned mcp_catalog_epoch;
   unsigned lsp_capabilities;
   char lsp_provider[256];
-  char lsp_error[512]; /* One exclusive exchange; never the context's last result. */
+  char rpc_error[512]; /* One exclusive exchange; never the context's last result. */
   /* PP_KIND_LIB */
   os_dylib lib;
   const astools_tool_vtable *vt;

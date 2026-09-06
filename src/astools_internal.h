@@ -203,6 +203,7 @@ astools_err astools_args_validate(const astools_cmd *cmd, xcdn_node_t *args,
 #define ASTOOLS_MODE_PERSISTENT 1
 #define ASTOOLS_PROTOCOL_NATIVE 0
 #define ASTOOLS_PROTOCOL_LSP 1
+#define ASTOOLS_PROTOCOL_MCP 2
 
 typedef struct {
   char *path;  /* after ${workspace} expansion; may be relative (rare) */
@@ -238,6 +239,7 @@ typedef struct {
 
 struct astools_cmd {
   char *name;
+  char *mcp_name, *mcp_input_schema, *mcp_output_schema; /* Host-reviewed server binding. */
   char *summary;
   char *description; /* may be NULL */
   bool read_only, destructive, idempotent, long_running, deprecated;
@@ -275,6 +277,7 @@ typedef struct astools_manifest {
 } astools_manifest;
 
 bool astools_lsp_manifest_valid(const astools_manifest *m);
+bool astools_mcp_command_parse(const astools_manifest *m, astools_cmd *cmd, const xcdn_node_t *binding);
 
 /* Parse + schema-validate one manifest document. workspace expands
  * "${workspace}" in permission paths (may be NULL to leave verbatim).
