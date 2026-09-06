@@ -80,7 +80,9 @@ endif()
 set(ASTOOLS_SOURCES
   src/util.c
   src/json.c
+  src/utf8.c
   src/time.c
+  src/duration.c
   src/uuid.c
   src/sha256.c
   src/hash_file.c
@@ -192,6 +194,8 @@ if(ASTOOLS_BUILD_STD)
   set(ASTOOLS_STD_SOURCES
     std/main.c
     src/sha256.c
+    src/utf8.c
+    src/duration.c
     std/version.c
     std/sdk.c
     std/regex.c
@@ -201,6 +205,8 @@ if(ASTOOLS_BUILD_STD)
     std/tool_sys.c
     std/tool_env.c
     std/tool_proc.c
+    std/process_capture.c
+    std/process_output.c
     std/tool_git.c
     std/tool_code.c
     std/tool_project.c

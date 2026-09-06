@@ -84,12 +84,12 @@ static bool get_opt_string(const xcdn_value_t *obj, const char *key,
 /* Duration node -> positive milliseconds. */
 static bool dur_node_ms(const xcdn_node_t *n, int64_t *out_ms) {
   const char *s;
-  int64_t secs;
+  int64_t ms;
   if (!node_is_type(n, XCDN_VAL_DURATION)) return false;
   s = n->value->data.string;
-  if (!s || !astools_duration_parse(s, &secs)) return false;
-  if (secs <= 0 || secs > INT64_MAX / 1000) return false;
-  *out_ms = secs * 1000;
+  if (!s || !astools_duration_parse_ms(s, &ms)) return false;
+  if (ms <= 0 || ms > ASTOOLS_PERIOD_MAX_MS) return false;
+  *out_ms = ms;
   return true;
 }
 
@@ -1409,7 +1409,9 @@ static xcdn_value_t *val_string(const char *s) {
 static xcdn_value_t *val_duration_ms(int64_t ms) {
   char buf[32];
   xcdn_value_t *v;
-  snprintf(buf, sizeof(buf), "PT%lldS", (long long)(ms / 1000));
+  if (ms % 1000)
+    snprintf(buf,sizeof buf,"PT%lld.%03dS",(long long)(ms/1000),(int)(ms%1000));
+  else snprintf(buf, sizeof(buf), "PT%lldS", (long long)(ms / 1000));
   v = xcdn_value_duration(buf);
   if (v && !v->data.string) {
     xcdn_value_free(v);
@@ -1782,7 +1784,7 @@ fail:
 }
 
 /* Canonical re-serialization: fields in order, defaults materialized,
- * absent optionals omitted, durations as r"PT<seconds>S". */
+ * absent optionals omitted, durations preserve millisecond precision. */
 astools_err astools_manifest_render(const astools_manifest *m, char **out) {
   xcdn_document_t *doc = NULL;
   xcdn_node_t *root = NULL;

@@ -57,8 +57,10 @@
         relative) to run inside the project. stdin, when given, is piped
         to the child and then closed. env adds variables on top of the
         scrubbed base environment. timeout kills the child early; it still
-        counts as a result (negative exit_code = terminating signal), not
-        an error. Output is captured up to the runtime caps and flagged
+        returns a result with timed_out=true (even if the leader had already
+        exited). Negative exit_code identifies a terminating signal.
+        NUL or invalid UTF-8 output uses base64 with explicit encoding and
+        captured byte counts. Output is captured up to the runtime caps and flagged
         via stdout_truncated / stderr_truncated.
       """,
       annotations: { destructive: true, long_running: true },
@@ -89,7 +91,7 @@
         #param {
           name: "timeout",
           type: #type { kind: "duration" },
-          description: "Kill deadline; defaults to the invocation timeout.",
+          description: "Local timeout, up to 4294967294 ms with millisecond precision; zero leaves the outer invocation deadline in charge.",
         },
       ],
       returns: {
@@ -97,16 +99,22 @@
           #param { name: "exit_code", type: #type { kind: "integer" },
                    required: true,
                    description: "Exit status; negative = killed by signal." },
+          #param { name: "timed_out", type: #type { kind: "boolean" },
+                   required: true, description: "Local deadline expired; do not infer success from exit_code alone." },
+          #param { name: "stdout_encoding", type: #type { kind: "enum", values: ["utf8", "base64"] }, required: true, description: "Encoding of stdout." },
+          #param { name: "stderr_encoding", type: #type { kind: "enum", values: ["utf8", "base64"] }, required: true, description: "Encoding of stderr." },
+          #param { name: "stdout_bytes", type: #type { kind: "integer", min: 0 }, required: true, description: "Captured bytes before encoding." },
+          #param { name: "stderr_bytes", type: #type { kind: "integer", min: 0 }, required: true, description: "Captured bytes before encoding." },
           #param { name: "stdout", type: #type { kind: "string" },
                    required: true, description: "Captured standard output." },
           #param { name: "stderr", type: #type { kind: "string" },
                    required: true, description: "Captured standard error." },
           #param { name: "stdout_truncated",
                    type: #type { kind: "boolean" }, required: true,
-                   description: "True when the stdout cap was hit." },
+                   description: "Output may be incomplete because of a cap or deadline." },
           #param { name: "stderr_truncated",
                    type: #type { kind: "boolean" }, required: true,
-                   description: "True when the stderr cap was hit." },
+                   description: "Output may be incomplete because of a cap or deadline." },
           #param { name: "duration", type: #type { kind: "duration" },
                    required: true,
                    description: "Wall-clock run time of the child." },
@@ -117,8 +125,8 @@
         #example {
           title: "List a directory without a shell",
           call: { argv: ["ls", "-1"], cwd: "src" },
-          result: { exit_code: 0, stdout: "app.c\nmain.c\nutil.c\n",
-                    stderr: "", stdout_truncated: false,
+          result: { exit_code: 0, timed_out: false, stdout: "app.c\nmain.c\nutil.c\n",
+                    stderr: "", stdout_encoding: "utf8", stderr_encoding: "utf8", stdout_bytes: 20, stderr_bytes: 0, stdout_truncated: false,
                     stderr_truncated: false, duration: r"PT1S" },
         },
       ],

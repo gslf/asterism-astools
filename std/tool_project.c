@@ -251,7 +251,7 @@ static void run_action(astd_req *r, const char *action) {
                          emsg, sizeof emsg) != 0) {
       xcdn_value_free(step_values);
       free(report);
-      astd_fail(r, "project/not-installed", "%s", emsg);
+      astd_fail(r, "project/execution-error", "%s", emsg);
       return;
     }
     sv = xcdn_value_object();
@@ -272,10 +272,7 @@ static void run_action(astd_req *r, const char *action) {
     rc |= astd_set_val(sv, "argv", argv);
     truncated = truncated || rr.out_trunc || rr.err_trunc;
     rc |= astd_set_int(sv, "exit_code", rr.exit_code);
-    rc |= astd_set_str(sv, "stdout", rr.out ? rr.out : "");
-    rc |= astd_set_str(sv, "stderr", rr.err ? rr.err : "");
-    rc |= astd_set_bool(sv, "stdout_truncated", rr.out_trunc);
-    rc |= astd_set_bool(sv, "stderr_truncated", rr.err_trunc);
+    rc |= astd_run_output(sv, &rr);
     exit_code = rr.exit_code;
     free(rr.out);
     free(rr.err);

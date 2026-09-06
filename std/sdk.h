@@ -101,6 +101,9 @@ typedef struct {
   int err_trunc;
 } astd_run_res;
 
+/* Text is UTF-8; NUL or invalid UTF-8 uses base64 with exact captured byte counts. */
+int astd_run_output(xcdn_value_t *value, const astd_run_res *result);
+int64_t astd_run_clock_ms(void);
 int astd_run_capture(char *const *argv, char *const *envp, const char *cwd,
                      const char *input, size_t input_n, size_t out_cap,
                      size_t err_cap, int64_t timeout_ms, astd_run_res *rr,

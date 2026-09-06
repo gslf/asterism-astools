@@ -6,6 +6,10 @@ A *tool* is a directory dropped into a registry root. One xCDN manifest inside i
 
 Architecture and design: [docs/SPECS.md](docs/SPECS.md).
 
+[Process results](docs/process-results.md) distinguish exit status, timeout,
+capture limits and exact byte encodings. Fixed durations retain milliseconds
+through validation, manifest rendering and execution.
+
 
 ## What ships
 

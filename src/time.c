@@ -1,5 +1,5 @@
 /*
- * time.c — injectable clock, RFC 3339 parse/format, ISO 8601 durations.
+ * time.c — injectable clock, RFC 3339 parse/format.
  *
  * Calendar conversion uses the days-from-civil algorithm (proleptic
  * Gregorian), valid over the whole int64 range used here; no timegm, no
@@ -169,79 +169,4 @@ void astools_time_format_rfc3339(astools_time t, char out[32]) {
   out[18] = (char)('0' + se % 10);
   out[19] = 'Z';
   out[20] = '\0';
-}
-
-/* ---- ISO 8601 durations -------------------------------------------------- */
-
-/* Non-negative integer, 1..12 digits (bounds every legal total well inside
- * int64 seconds). Rejects fractional values. */
-static bool dur_number(const char **pp, int64_t *out) {
-  const char *p = *pp;
-  int64_t v = 0;
-  int nd = 0;
-  while (*p >= '0' && *p <= '9') {
-    if (nd >= 12) return false;
-    v = v * 10 + (*p - '0');
-    p++;
-    nd++;
-  }
-  if (nd == 0) return false;
-  if (*p == '.' || *p == ',') return false;
-  *pp = p;
-  *out = v;
-  return true;
-}
-
-bool astools_duration_parse(const char *s, int64_t *out_seconds) {
-  const char *p;
-  int64_t acc = 0, v;
-  if (!s || !out_seconds) return false;
-  p = s;
-  if (*p != 'P') return false;
-  p++;
-  if (*p == '\0') return false;
-
-  if (*p != 'T') {
-    if (!dur_number(&p, &v)) return false;
-    if (*p == 'W') { /* PnW is exclusive: no other components */
-      p++;
-      if (*p != '\0') return false;
-      *out_seconds = v * INT64_C(604800);
-      return true;
-    }
-    if (*p != 'D') return false; /* rejects Y and M date designators */
-    p++;
-    acc = v * INT64_C(86400);
-    if (*p == '\0') {
-      *out_seconds = acc;
-      return true;
-    }
-  }
-
-  if (*p != 'T') return false;
-  p++;
-  if (*p == '\0') return false; /* "T" requires at least one time part */
-  {
-    int stage = 0; /* enforces H before M before S, each at most once */
-    while (*p != '\0') {
-      char u;
-      if (!dur_number(&p, &v)) return false;
-      u = *p;
-      p++;
-      if (u == 'H' && stage < 1) {
-        acc += v * 3600;
-        stage = 1;
-      } else if (u == 'M' && stage < 2) {
-        acc += v * 60;
-        stage = 2;
-      } else if (u == 'S' && stage < 3) {
-        acc += v;
-        stage = 3;
-      } else {
-        return false;
-      }
-    }
-  }
-  *out_seconds = acc;
-  return true;
 }

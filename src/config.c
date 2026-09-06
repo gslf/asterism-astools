@@ -134,18 +134,18 @@ static astools_err get_int(const xcdn_node_t *n, const char *key, int64_t minv,
 static astools_err get_duration_ms(const xcdn_node_t *n, const char *key,
                                    int64_t *out_ms, char **err_msg) {
   const xcdn_value_t *v = n ? n->value : NULL;
-  int64_t secs = 0;
+  int64_t ms = 0;
   if (!v || v->type != XCDN_VAL_DURATION || !v->data.string)
     return cfg_fail(err_msg, "config: %s: expected duration (r\"PT30S\")",
                     key);
-  if (!astools_duration_parse(v->data.string, &secs))
+  if (!astools_duration_parse_ms(v->data.string, &ms))
     return cfg_fail(err_msg, "config: %s: invalid ISO 8601 duration '%s'",
                     key, v->data.string);
-  if (secs <= 0)
+  if (ms <= 0)
     return cfg_fail(err_msg, "config: %s: duration must be positive", key);
-  if (secs > INT64_MAX / 1000)
-    return cfg_fail(err_msg, "config: %s: duration too large", key);
-  *out_ms = secs * 1000;
+  if (ms > ASTOOLS_PERIOD_MAX_MS)
+    return cfg_fail(err_msg,"config: %s: duration exceeds the execution-period limit",key);
+  *out_ms = ms;
   return ASTOOLS_OK;
 }
 

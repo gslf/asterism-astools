@@ -37,7 +37,7 @@ static const char FS_MANIFEST[] =
     "      name: \"read\",\n"
     "      summary: \"Read a file.\",\n"
     "      annotations: { read_only: true, idempotent: true },\n"
-    "      timeout: r\"PT10S\",\n"
+    "      timeout: r\"PT0.010S\",\n"
     "      params: [\n"
     "        #param { name: \"path\", type: #type { kind: \"path\","
     " access: \"read\", must_exist: true }, required: true,"
@@ -167,7 +167,7 @@ TEST(parse_fs_manifest_fields) {
   ASSERT_TRUE(read->idempotent);
   ASSERT_TRUE(!read->destructive);
   ASSERT_TRUE(!read->deprecated);
-  ASSERT_EQ_INT(read->timeout_ms, 10000);
+  ASSERT_EQ_INT(read->timeout_ms, 10);
   ASSERT_EQ_INT(read->params_len, 4);
   ASSERT_EQ_STR(read->params[0].name, "path");
   ASSERT_TRUE(read->params[0].required);

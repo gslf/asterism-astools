@@ -141,6 +141,8 @@ TEST(kind_datetime) {
 }
 
 TEST(kind_duration) {
+  ACCEPT("{ kind: \"duration\" }", "r\"PT0.125S\"");
+  REJECT("{ kind: \"duration\" }", "r\"PT0.0001S\"");
   ACCEPT("{ kind: \"duration\" }", "r\"PT30S\"");
   ACCEPT("{ kind: \"duration\" }", "r\"P1DT1S\"");
   REJECT("{ kind: \"duration\" }", "\"PT30S\"");

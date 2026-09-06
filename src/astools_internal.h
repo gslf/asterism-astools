@@ -5,7 +5,7 @@
  * declared in its section plus static helpers):
  *
  *   util.c          buffers, strings, fnv, base64, slug checks
- *   time.c          RFC 3339 + ISO 8601 durations, injectable clock
+ *   time.c          RFC 3339 and injectable clock; duration.c fixed periods
  *   uuid.c          UUID v4 generation / validation
  *   sha256.c        SHA-256 (streaming + one-shot + file)
  *   log.c           leveled rotating file log + host callback + audit
@@ -100,8 +100,7 @@ astools_clock astools_clock_system(void);
 
 bool astools_time_parse_rfc3339(const char *s, astools_time *out);
 void astools_time_format_rfc3339(astools_time t, char out[32]);
-/* ISO 8601 duration into seconds; months/years rejected. */
-bool astools_duration_parse(const char *s, int64_t *out_seconds);
+#include "duration.h"
 
 /* ═══════════════════════ uuid.c ═══════════════════════ */
 

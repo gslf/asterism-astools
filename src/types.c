@@ -1035,11 +1035,11 @@ astools_err astools_type_check(const astools_type *t, const xcdn_node_t *v,
       return ASTOOLS_OK;
     }
     case AT_DURATION: {
-      int64_t secs;
+      int64_t milliseconds;
       if (val->type != XCDN_VAL_DURATION)
         return mismatch(ctx, "duration", val, err, err_cap);
       if (!val->data.string ||
-          !astools_duration_parse(val->data.string, &secs)) {
+          !astools_duration_parse_ms(val->data.string, &milliseconds)) {
         tset_err(err, err_cap, "%s: invalid ISO 8601 duration", ctx);
         return ASTOOLS_ERR_INVALID;
       }

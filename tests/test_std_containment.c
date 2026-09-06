@@ -12,12 +12,18 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "astools.h"
+#include "astools_internal.h"
 #include "os.h"
+#include "xcdn.h"
 
 #ifndef ASTOOLS_STD_PACKAGES
 #define ASTOOLS_STD_PACKAGES "packages"
 #endif
+
+static const xcdn_value_t *field(const xcdn_value_t *v, const char *key) {
+  xcdn_node_t *n = xcdn_object_get(v,key);
+  return n ? n->value : NULL;
+}
 
 /* Whole-file read into a malloc'd NUL-terminated buffer; NULL if absent. */
 static char *slurp(const char *path) {
@@ -193,16 +199,58 @@ TEST(proc_timeout_does_not_wait_for_orphan_pipe_holders) {
   op.config_path = cfg_path;
   ASSERT_OK(astools_open(&op, &c));
 
-  memset(&r, 0, sizeof r);
-  start = os_monotonic_ms();
-  ASSERT_OK(astools_invoke(
-      c, "proc", "run",
-      "{ argv: [\"/bin/sh\", \"-c\", \"sleep 4 &\"], timeout: r\"PT1S\" }",
-      3000, &r));
-  elapsed = os_monotonic_ms() - start;
-  ASSERT_EQ_INT(r.ok, 1);
-  ASSERT_TRUE(elapsed < 2500);
-  astools_result_free(&r);
+  const char *cases[] = {
+    "{argv:[\"/bin/sh\",\"-c\",\"sleep 4 &\"],timeout: r\"PT0.1S\"}",
+    "{argv:[\"/bin/sh\",\"-c\",\"exec 0<&- 1>&- 2>&-; sleep 4\"],timeout: r\"PT0.1S\"}"
+  };
+  for (size_t i = 0; i < sizeof cases/sizeof *cases; i++) {
+    memset(&r, 0, sizeof r);
+    start = os_monotonic_ms();
+    ASSERT_OK(astools_invoke(c,"proc","run",cases[i],3000,&r));
+    elapsed = os_monotonic_ms() - start;
+    ASSERT_EQ_INT(r.ok,1);
+    ASSERT_TRUE(elapsed < 1000);
+    xcdn_document_t *doc = xcdn_parse_str(r.result_xcdn,strlen(r.result_xcdn),NULL);
+    ASSERT_TRUE(doc && doc->values_len == 1);
+    const xcdn_value_t *result = doc->values[0]->value;
+    xcdn_node_t *timeout = xcdn_object_get(result,"timed_out");
+    ASSERT_TRUE(timeout && timeout->value && timeout->value->type == XCDN_VAL_BOOL);
+    ASSERT_TRUE(timeout->value->data.boolean);
+    xcdn_document_free(doc);
+    astools_result_free(&r);
+  }
+  const char *outputs[] = {
+    "{argv:[\"/bin/sh\",\"-c\",\"printf '\\\\000\\\\377A'; printf 'café' >&2\"]}",
+    "{argv:[\"/bin/sh\",\"-c\",\"printf '%05000d' 0; printf '\\\\000tail'\"]}",
+    "{argv:[\"/bin/cat\"],stdin:\"café\"}",
+    "{argv:[\"/bin/sh\",\"-c\",\"printf done; exit 7\"]}"
+  };
+  const size_t sizes[] = {3,5005,5,4};
+  for (size_t i = 0; i < sizeof outputs/sizeof *outputs; i++) {
+    ASSERT_OK(astools_invoke(c,"proc","run",outputs[i],3000,&r)); ASSERT_EQ_INT(r.ok,1);
+    xcdn_document_t *doc = xcdn_parse_str(r.result_xcdn,strlen(r.result_xcdn),NULL);
+    ASSERT_TRUE(doc && doc->values_len == 1);
+    const xcdn_value_t *value = doc->values[0]->value;
+    ASSERT_TRUE(field(value,"timed_out") && field(value,"exit_code"));
+    ASSERT_TRUE(!xcdn_value_as_bool(field(value,"timed_out")));
+    ASSERT_EQ_STR(xcdn_value_as_string(field(value,"stdout_encoding")),i < 2 ? "base64" : "utf8");
+    ASSERT_EQ_INT(xcdn_value_as_int(field(value,"stdout_bytes")),sizes[i]);
+    ASSERT_EQ_INT(xcdn_value_as_int(field(value,"exit_code")),i == 3 ? 7 : 0);
+    const char *text = xcdn_value_as_string(field(value,"stdout")); ASSERT_TRUE(text != NULL);
+    if (i < 2) {
+      uint8_t *bytes = NULL; size_t count = 0;
+      ASSERT_TRUE(astools_base64_decode(text,&bytes,&count)); ASSERT_EQ_INT(count,sizes[i]);
+      if (!i) {
+        ASSERT_TRUE(!memcmp(bytes,"\0\xff" "A",3));
+        ASSERT_EQ_STR(xcdn_value_as_string(field(value,"stderr")),"café");
+        ASSERT_EQ_STR(xcdn_value_as_string(field(value,"stderr_encoding")),"utf8");
+      } else ASSERT_TRUE(!memcmp(bytes+5000,"\0tail",5));
+      free(bytes);
+    } else ASSERT_EQ_STR(text,i == 2 ? "café" : "done");
+    xcdn_document_free(doc); astools_result_free(&r);
+  }
+  ASSERT_OK(astools_invoke(c,"proc","run","{argv:[\"/absent-asterism-executable\"]}",3000,&r));
+  ASSERT_EQ_INT(r.ok,0); ASSERT_EQ_STR(r.error_code,"proc/failed"); astools_result_free(&r);
   astools_close(c);
   astools_test_rmtree(root);
 }

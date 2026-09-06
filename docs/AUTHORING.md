@@ -3,6 +3,10 @@
 A tool is a directory. Everything the runtime and the model need to know about it lives in one file, `manifest.xcdn`. This guide walks through building a tool from scratch. `docs/SPECS.md` explains the architecture, and
 `packages/fs/manifest.xcdn` is a complete worked example.
 
+Fixed durations, capture encodings and deadline semantics follow the shared
+[process result contract](process-results.md). Duration literals preserve
+milliseconds; binary output must not be disguised as a truncated C string.
+
 ## 1. Layout
 
 ```

@@ -28,6 +28,8 @@
 #define ASTOOLS_JSON_H
 
 #include <stddef.h>
+#define jx_utf8_seq astls_x_jx_utf8_seq
+size_t jx_utf8_seq(const unsigned char *text, size_t len);
 #define jx_utf8_valid astls_x_jx_utf8_valid
 int jx_utf8_valid(const char *text, size_t len);
 
