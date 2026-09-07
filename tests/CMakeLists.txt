@@ -195,7 +195,25 @@ endif()
 
 if(NOT WIN32 AND NOT ASTOOLS_NO_THREADS)
   find_program(ASTOOLS_CLANGD_TEST_EXECUTABLE NAMES clangd)
+  if(APPLE AND ASTOOLS_CLANGD_TEST_EXECUTABLE STREQUAL "/usr/bin/clangd")
+    # /usr/bin contains Xcode dispatch shims, not the provider itself. Resolve
+    # before entering Seatbelt: only the selected entry binary is admitted.
+    execute_process(COMMAND xcrun --find clangd
+      RESULT_VARIABLE ASTOOLS_CLANGD_LOOKUP_STATUS
+      OUTPUT_VARIABLE ASTOOLS_CLANGD_RESOLVED
+      ERROR_VARIABLE ASTOOLS_CLANGD_LOOKUP_ERROR
+      TIMEOUT 15
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT ASTOOLS_CLANGD_LOOKUP_STATUS STREQUAL "0" OR
+       NOT IS_ABSOLUTE "${ASTOOLS_CLANGD_RESOLVED}" OR
+       NOT EXISTS "${ASTOOLS_CLANGD_RESOLVED}" OR
+       ASTOOLS_CLANGD_RESOLVED STREQUAL "/usr/bin/clangd")
+      message(FATAL_ERROR "Cannot resolve the Xcode clangd provider: ${ASTOOLS_CLANGD_LOOKUP_ERROR}")
+    endif()
+    set(ASTOOLS_CLANGD_TEST_EXECUTABLE "${ASTOOLS_CLANGD_RESOLVED}")
+  endif()
   if(ASTOOLS_CLANGD_TEST_EXECUTABLE)
+    message(STATUS "LSP conformance provider: ${ASTOOLS_CLANGD_TEST_EXECUTABLE}")
     add_executable(test_lsp_clangd test_lsp_clangd.c fakes.c)
     target_include_directories(test_lsp_clangd PRIVATE . ../include ../src ../deps/xcdn-c/src)
     target_compile_options(test_lsp_clangd PRIVATE ${ASTOOLS_C_FLAGS})

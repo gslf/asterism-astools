@@ -81,7 +81,8 @@ static astools_err lsp_call(lsp_fixture *f, const char *command, const char *pos
                           jx_parse(result.result_xcdn, strlen(result.result_xcdn), out)))
     e = ASTOOLS_ERR_PROTOCOL;
   if (e != ASTOOLS_OK)
-    fprintf(stderr, "LSP returned %s: %s\n", astools_err_name(e),
+    fprintf(stderr, "LSP %s returned %s (%s): %s\n", command, astools_err_name(e),
+            result.error_code ? result.error_code : "",
             result.error_message ? result.error_message : "");
   astools_result_free(&result);
   return e;

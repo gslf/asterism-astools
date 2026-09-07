@@ -226,9 +226,10 @@ TEST(project_test_reports_real_collection) {
     "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true CONFIGURATIONS Release)\n",
     "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true CONFIGURATIONS Release)\nset_tests_properties(ok PROPERTIES DISABLED TRUE)\n",
     "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME fails COMMAND ${CMAKE_COMMAND} -E false CONFIGURATIONS Release)\n",
-    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\n"
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\n",
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nmessage(FATAL_ERROR \"fixture configuration failure\")\n"
   };
-  const char *statuses[] = {"passed", "not_run", "failed", "failed"};
+  const char *statuses[] = {"passed", "not_run", "failed", "failed", "failed"};
   size_t i;
   ASSERT_TRUE(astools_test_tmpdir(ws));
   for (i = 0; ws[i]; i++) if (ws[i] == '\\') ws[i] = '/';
@@ -261,13 +262,25 @@ TEST(project_test_reports_real_collection) {
       if (strcmp(status->value->data.string, statuses[i])) fprintf(stderr, "%s\n", r.result_xcdn);
       ASSERT_EQ_STR(status->value->data.string, statuses[i]);
     }
-    if (i < 3) {
+    if (i < 3 || i == 4) {
       const xcdn_node_t *collected = xcdn_object_get(doc->values[0]->value, "tests_collected");
       const xcdn_node_t *skipped = xcdn_object_get(doc->values[0]->value, "tests_skipped");
       ASSERT_TRUE(collected && collected->value->type == XCDN_VAL_INT);
       ASSERT_TRUE(skipped && skipped->value->type == XCDN_VAL_INT);
-      ASSERT_EQ_INT(collected->value->data.integer, 1);
-      ASSERT_EQ_INT(skipped->value->data.integer, i == 1 ? 1 : 0);
+      if (i == 4) ASSERT_EQ_INT(collected->value->data.integer, -1);
+      if (i != 0 && collected->value->data.integer == -1) {
+        /* A failed/disabled run need not produce a usable JUnit report on
+         * every CTest/generator combination. Unknown counts must stay unknown
+         * and cannot certify success. The positive fixture always needs proof. */
+        ASSERT_EQ_INT(skipped->value->data.integer, -1);
+        ASSERT_EQ_STR(status->value->data.string, "failed");
+      } else {
+        if (collected->value->data.integer != 1 ||
+            skipped->value->data.integer != (i == 1 ? 1 : 0))
+          fprintf(stderr, "project.test variant %zu: %s\n", i, r.result_xcdn);
+        ASSERT_EQ_INT(collected->value->data.integer, 1);
+        ASSERT_EQ_INT(skipped->value->data.integer, i == 1 ? 1 : 0);
+      }
     }
     xcdn_document_free(doc);
     astools_result_free(&r);

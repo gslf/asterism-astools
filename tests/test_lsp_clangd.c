@@ -6,6 +6,7 @@ static void semantic_case(const char *level) {
                                "double pick(double x) { return x; }\n"
                                "int use() { /* 😀 */ return pick(1); }\n";
   lsp_fixture f;
+  fprintf(stderr, "provider executable: %s; sandbox: %s\n", ASTOOLS_CLANGD_PATH, level);
   ASSERT_TRUE(lsp_setup(&f, ASTOOLS_CLANGD_PATH, "--background-index=false", source, level));
   jx_value *out = NULL;
   astools_err e = lsp_call(&f, "symbols", NULL, 10000, &out);
