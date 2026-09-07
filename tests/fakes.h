@@ -1,5 +1,5 @@
 /*
- * fakes.h — shared fixtures for the astools integration tests.
+ * fakes.h — shared fixtures for the ⁂ astools integration tests.
  *
  * fake_registry_write drops a minimal valid package (manifest only) into a
  * registry root; the runtime entry targets the CURRENT platform so the

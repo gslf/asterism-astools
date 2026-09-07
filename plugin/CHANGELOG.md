@@ -1,4 +1,4 @@
-# astools plugin changelog
+# ⁂ astools plugin changelog
 
 ## 0.3.0 — 2026-08-14
 

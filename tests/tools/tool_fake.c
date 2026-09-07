@@ -1,5 +1,5 @@
 /*
- * tool_fake.c — scripted oneshot protocol tool for the astools test-suite
+ * tool_fake.c — scripted oneshot protocol tool for the ⁂ astools test-suite
  *. One tiny xcdn-linked binary; the FIRST argv argument selects the
  * behavior:
  *

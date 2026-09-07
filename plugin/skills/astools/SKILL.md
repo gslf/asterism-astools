@@ -1,11 +1,11 @@
 ---
 name: astools
-description: Conventions for using the astools system tools — safe defaults, how to read errors, and what is off by default.
+description: Conventions for using the ⁂ astools system tools — safe defaults, how to read errors, and what is off by default.
 ---
 
-# Using astools
+# Using ⁂ astools
 
-astools exposes local system tools (code, project, fs, grep, edit, sys, env,
+⁂ astools exposes local system tools (code, project, fs, grep, edit, sys, env,
 proc, git) through one MCP server. The tool manifests are the contract: argument
 types are strict (no coercion — `"3"` is not an integer), defaults are
 injected for you, and every path argument is canonicalized and checked
@@ -38,7 +38,7 @@ against operator grants before anything runs.
   what to grant instead.
 - `astools/invalid-args` names the offending parameter. Fix that
   parameter and call again; do not resend the identical call.
-- `git/not-installed`, or the astools server not starting at all, means
+- `git/not-installed`, or the ⁂ astools server not starting at all, means
   the host installation is incomplete. That is user action — nothing a
   different call can fix.
 

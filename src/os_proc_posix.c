@@ -1,5 +1,5 @@
 /*
- * os_proc_posix.c — POSIX backend of the astools process/path extension
+ * os_proc_posix.c — POSIX backend of the ⁂ astools process/path extension
  * of os.h: stat/realpath helpers, directory walks, child processes over
  * three CLOEXEC pipes with rlimits and a private process group, dlopen.
  *

@@ -92,8 +92,8 @@ TEST(schema_validation_uses_unicode_and_exact_integer_boundaries) {
   const char *schemas[] = {
       "{\"type\":\"string\",\"minLength\":2,\"maxLength\":2}",
       "{\"type\":\"integer\",\"exclusiveMinimum\":-2,\"maximum\":9007199254740992}",
-      "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"array\",\"items\":{\"enum\":[1,2]},"
-      "\"maxItems\":2}},\"required\":[\"a\"],\"additionalProperties\":false}",
+      ("{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"array\",\"items\":{\"enum\":[1,2]},"
+       "\"maxItems\":2}},\"required\":[\"a\"],\"additionalProperties\":false}"),
       "{\"type\":\"array\",\"minItems\":1,\"items\":false}",
       "{\"const\":null}",
       "{\"type\":\"integer\"}"};

@@ -1,4 +1,4 @@
-// astools standard suite — semantic, process-free coding primitives.
+// ⁂ astools standard suite — semantic, process-free coding primitives.
 
 #astools_tool {
   manifest_version: 1,

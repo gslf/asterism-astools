@@ -1,17 +1,19 @@
-# ⁂ astools
+# ⁂ astools - asterism tools
 
-⁂ Asterism Tools, a local, plug-and-play system-tool registry for LLM agents.
+### Local, plug-and-play system-tool registry for AI
+
+>⁂ asterism is a modular agent harness that turns language models into tools for creating and completing real-world workflows and automations. **SLM** and **local inference** friendly. Read the central [architecture decisions and system value](https://github.com/gslf/asterism-asngn/blob/main/docs/ARCHITECTURE.md).
+
+⁂ astools connects model intent to real operations through installable, typed packages. Its local registry and supervisor can expose filesystem operations, processes and domain-specific integrations. The bundled coding tools are one
+specialization. External services require installed integrations and explicit host grants. ⁂ astools itself neither runs nor restricts the choice of LLM.
 
 A *tool* is a directory dropped into a registry root. One xCDN manifest inside it is simultaneously the machine contract (commands, typed parameters, constraints, permissions) and the conversational interface (descriptions and worked examples the model reads).
 
 Architecture and design: [docs/SPECS.md](docs/SPECS.md).
 
-[Process results](docs/process-results.md) distinguish exit status, timeout,
-capture limits and exact byte encodings. Fixed durations retain milliseconds
-through validation, manifest rendering and execution.
+[Process results](docs/process-results.md) distinguish exit status, timeout, capture limits and exact byte encodings. Fixed durations retain milliseconds through validation, manifest rendering and execution.
 
-[Parser fuzzing](docs/fuzzing.md) covers JSON, manifest/duration and MCP schema
-contracts with optional Clang targets (`ASTOOLS_BUILD_FUZZERS`, default OFF).
+[Parser fuzzing](docs/fuzzing.md) covers JSON, manifest/duration and MCP schema contracts with optional Clang targets (`ASTOOLS_BUILD_FUZZERS`, default OFF).
 
 
 ## What ships
@@ -36,7 +38,15 @@ ctest --test-dir build
 
 Requires CMake ≥ 3.16 and a C99 toolchain. The only dependency is the [xCDN-C](https://github.com/gslf/xCDN-C) submodule.
 
-Options: `ASTOOLS_BUILD_MCP` / `ASTOOLS_BUILD_STD` / `ASTOOLS_BUILD_CHECK` / `ASTOOLS_BUILD_TESTS` / `ASTOOLS_BUILD_PLUGIN` (ON), `ASTOOLS_BUILD_NET` / `ASTOOLS_NO_THREADS` / `ASTOOLS_SANITIZERS` (OFF).
+Options: 
+- `ASTOOLS_BUILD_MCP` 
+- `ASTOOLS_BUILD_STD`
+- `ASTOOLS_BUILD_CHECK`
+- `ASTOOLS_BUILD_TESTS` 
+- `ASTOOLS_BUILD_PLUGIN` (ON)
+- `ASTOOLS_BUILD_NET`
+- `ASTOOLS_NO_THREADS`
+- `ASTOOLS_SANITIZERS` (OFF)
 
 ## Quick start
 
@@ -88,24 +98,3 @@ scoped to that tool and does not enable the arbitrary `proc.run` escape hatch.
 
 ## License
 MIT [LICENSE](LICENSE).
-
-
-`astools_command_schemas` exports resolved enabled commands and their input JSON
-Schemas from the same typed manifests used by MCP. Catalog, GBNF and this export
-share one registry selector. Exported availability does not bypass the host's
-argument-dependent invocation policy.
-
-Command discovery can produce an immutable selection shared by catalog, grammar
-and JSON Schema. Checked invocation binds commands to their selected version and
-content, including after queue waits. See [discovery](docs/discovery.md) for the
-API, limits, permissions and tests. Active and queued invocations are observable;
-queue cancellation no longer waits for another invocation to release its slot.
-
-Optional [clangd semantic navigation](docs/lsp.md) adds symbols, definitions,
-references and versioned diagnostics through a managed LSP process. It uses the
-same host policy and package checks, with explicit coverage limits.
-
-Optional [reviewed MCP stdio packages](docs/mcp-client.md) call locally installed
-servers through the same supervisor. Host-owned bindings validate input/output
-schemas and retain complete error payloads. The current 2026-07-28 adapter has an
-explicitly restricted schema profile; remote metadata cannot grant capabilities.

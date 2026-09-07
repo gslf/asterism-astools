@@ -105,34 +105,33 @@ static size_t cmake_steps(const char *action, project_step *s) {
   s[0].argv[2] = ".";
   s[0].argv[3] = "-B";
   s[0].argv[4] = "build";
+  s[0].argv[5] = "-DCMAKE_BUILD_TYPE=Release";
 #ifdef _WIN32
   if (have_mingw_toolchain()) {
-    s[0].argv[5] = "-G";
-    s[0].argv[6] = "MinGW Makefiles";
+    s[0].argv[6] = "-G";
+    s[0].argv[7] = "MinGW Makefiles";
   }
 #endif
-  if (strcmp(action, "build") == 0 || strcmp(action, "diagnostics") == 0) {
-    s[1].argv[0] = "cmake";
-    s[1].argv[1] = "--build";
-    s[1].argv[2] = "build";
+  /* Multi-config generators require the same configuration for build and test. */
+  s[1].argv[0] = "cmake";
+  s[1].argv[1] = "--build";
+  s[1].argv[2] = "build";
+  s[1].argv[3] = "--config";
+  s[1].argv[4] = "Release";
+  if (strcmp(action, "build") == 0 || strcmp(action, "diagnostics") == 0)
     return 2;
-  }
   if (strcmp(action, "test") == 0) {
-    s[1].argv[0] = "cmake";
-    s[1].argv[1] = "--build";
-    s[1].argv[2] = "build";
     s[2].argv[0] = "ctest";
     s[2].argv[1] = "--test-dir";
     s[2].argv[2] = "build";
     s[2].argv[3] = "--output-on-failure";
     s[2].argv[4] = "--no-tests=error";
+    s[2].argv[5] = "-C";
+    s[2].argv[6] = "Release";
     return 3;
   }
-  s[1].argv[0] = "cmake";
-  s[1].argv[1] = "--build";
-  s[1].argv[2] = "build";
-  s[1].argv[3] = "--target";
-  s[1].argv[4] = strcmp(action, "lint") == 0 ? "lint" : "format";
+  s[1].argv[5] = "--target";
+  s[1].argv[6] = strcmp(action, "lint") == 0 ? "lint" : "format";
   return 2;
 }
 

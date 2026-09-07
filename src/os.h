@@ -2,7 +2,7 @@
  * os.h — platform shim for libastools: threads, filesystem, time,
  * processes, pipes.
  *
- * The baseline section (threads/fs/misc) is shared with the Asper sibling
+ * The baseline section (threads/fs/misc) is shared with the ⁂ asper sibling
  * and implemented by os_posix.c + os_common.c (os_win32.c on Windows).
  * The process/path section below is astools-specific and implemented by
  * os_proc_posix.c (os_proc_win32.c on Windows: pipes and kill-trees ride
@@ -170,7 +170,7 @@ int     os_hardware_threads(void); /* >= 1 */
 /* Path join with '/'. Returns malloc'd string. */
 char   *os_path_join(const char *a, const char *b);
 
-/* ═════════════════════ astools process/path extension ═════════════════════
+/* ═════════════════════ ⁂ astools process/path extension ═════════════════════
  * Implemented by os_proc_posix.c. Everything below returns
  * ASTOOLS_ERR_UNSUPPORTED from stub backends.
  */

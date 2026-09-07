@@ -23,7 +23,7 @@ entries that cannot fit are omitted as units. `astools_selection_omitted` report
 eligible candidates outside the final selection. Clients can issue a more
 specific query or allowlist to expand another command. The compact catalog lists
 only selected command signatures; the separate schema getter supplies details.
-Asngn exposes a bounded `discover` action that replaces the current selection.
+⁂ asngn exposes a bounded `discover` action that replaces the current selection.
 
 Selections own their strings and retain manifest descriptors. Their context must
 outlive them and any submitted tasks. A process-local registry revision changes

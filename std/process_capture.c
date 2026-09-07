@@ -241,7 +241,7 @@ int astd_run_capture(char *const *argv, char *const *envp, const char *cwd,
         rr->out_trunc |= outp[0] >= 0;
         rr->err_trunc |= errp[0] >= 0;
         /* Descendants may inherit these pipe ends.  Stop waiting for their
-         * EOF after the direct child deadline; the enclosing astools runtime
+         * EOF after the direct child deadline; the enclosing ⁂ astools runtime
          * owns the invocation process group and removes any residual tree. */
         close_fd(&inp[1]);
         close_fd(&outp[0]);

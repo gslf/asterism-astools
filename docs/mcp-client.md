@@ -1,6 +1,6 @@
 # Reviewed MCP stdio packages
 
-Astools can call a locally packaged MCP server through `runtime.protocol: "mcp"`
+⁂ astools can call a locally packaged MCP server through `runtime.protocol: "mcp"`
 and `runtime.mode: "persistent"`. This optional adapter shares the existing
 package checks, admission queues, host grants, sandbox and process supervisor.
 It requires MCP **2026-07-28**. It probes `server/discover`, then includes version,
@@ -28,7 +28,7 @@ supported; only Linux execution has been tested for this adapter.
 
 The contract has exactly `id`, `version`, `summary`, `description`, `arguments`,
 `permissions`, and `commands`. `arguments` is a literal argv array (at most 64
-strings). Commands use the ordinary Astools parameter, path and permission types,
+strings). Commands use the ordinary ⁂ astools parameter, path and permission types,
 plus an explicit binding:
 
 ```json
@@ -58,7 +58,7 @@ Native JSON Schema export includes the intersection of local parameter types and
 the captured MCP input schema. Text catalog/grammar represent local types; the
 runtime additionally enforces all captured assertions. Remote descriptions,
 instructions, icons, cache metadata and annotations never change permissions,
-model-facing descriptions or cacheability. MCP commands cannot opt into Astools
+model-facing descriptions or cacheability. MCP commands cannot opt into ⁂ astools
 answer caching. Before every invocation, bounded `tools/list` pagination checks
 that the chosen remote name and both schemas still match their reviewed copies.
 Object ordering is ignored; array ordering and every keyword remain significant.

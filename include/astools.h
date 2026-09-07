@@ -1,7 +1,7 @@
 /*
  * astools.h — public C API of libastools.
  *
- * astools (Asterism Tools) is a local, plug-and-play registry of system
+ * ⁂ astools is a local, plug-and-play registry of system
  * tools for LLM agents: a tool is a directory dropped into a registry root,
  * described by one #astools_tool xCDN manifest that is simultaneously the
  * machine contract and the conversational interface.

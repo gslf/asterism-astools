@@ -21,12 +21,12 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Strict flags apply to astools translation units only (deps use their own).
+# Strict flags apply to ⁂ astools translation units only (deps use their own).
 if(MSVC)
   # /wd4244: int64->int narrowing warnings; the POSIX-first sources narrow
   # deliberately where the values are already range-checked. /wd4456
   # (local shadowing) is not part of the GCC/Clang -Wall set either.
-  set(ASTOOLS_C_FLAGS /W4 /WX /wd4244 /wd4456)
+  set(ASTOOLS_C_FLAGS /W4 /WX /utf-8 /wd4244 /wd4456)
   # getenv/fopen & co. are used portably; the _s variants are MSVC-only,
   # and strdup & co. keep their POSIX names.
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
@@ -60,11 +60,11 @@ set(ASTOOLS_PLAT "${ASTOOLS_PLAT_OS}-${ASTOOLS_PLAT_ARCH}")
 
 # ── Dependencies: xCDN-C only ────────────────────────────────────────
 # xcdn-c registers its own add_test entries unconditionally, so its targets
-# must be buildable whenever our tests run (same approach as Asper).
+# must be buildable whenever our tests run (same approach as ⁂ asper).
 if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/xcdn-c/CMakeLists.txt)
   message(FATAL_ERROR "deps/xcdn-c missing — run: git submodule update --init")
 endif()
-# Guarded so an embedding host (e.g. asngn) that already provides the xcdn
+# Guarded so an embedding host (e.g. ⁂ asngn) that already provides the xcdn
 # target can add this project via add_subdirectory without a collision.
 if(NOT TARGET xcdn)
   if(ASTOOLS_BUILD_TESTS)

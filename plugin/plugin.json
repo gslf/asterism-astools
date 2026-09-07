@@ -2,9 +2,9 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "astools",
   "version": "0.3.0",
-  "description": "Asterism Tools: a local, plug-and-play registry of system tools for LLM agents. Files, search, edits, git and process execution behind one MCP server, sandboxed and deny-by-default.",
+  "description": "astools: a local, plug-and-play registry of system tools for LLM agents. Files, search, edits, git and process execution behind one MCP server, sandboxed and deny-by-default.",
   "license": "MIT",
-  "homepage": "https://github.com/gslf/astools",
+  "homepage": "https://github.com/gslf/asterism-astools",
   "keywords": [
     "tools",
     "agents",

@@ -34,7 +34,7 @@
  * (astools_tool_ref/unref). c->slot_mu guards slot admission. c->pp_mu
  * guards the persistent-process table. c->log_mu guards the file sink;
  * c->err_mu guards err_buf. Lock order: lock -> pp_mu -> log_mu. Never
- * take c->lock while holding any other astools lock.
+ * take c->lock while holding any other ⁂ astools lock.
  */
 
 #ifndef ASTOOLS_INTERNAL_H

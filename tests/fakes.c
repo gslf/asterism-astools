@@ -1,5 +1,5 @@
 /*
- * fakes.c — fixture writers for the astools integration tests (fakes.h).
+ * fakes.c — fixture writers for the ⁂ astools integration tests (fakes.h).
  *
  * Links astools_static for astools_buf / os_* / astools_plat_* only; the
  * emitted text is ordinary #astools_tool / #astools_config source that the

@@ -1,4 +1,4 @@
-# astools — Architecture and Design
+# ⁂ astools — Architecture and Design
 
 ## 1. Why this project exists
 
@@ -7,7 +7,7 @@ shell or an untyped collection of callbacks creates three problems: the model
 must guess syntax, the host cannot reason clearly about permissions, and large
 tool descriptions consume the context before useful work begins.
 
-astools is a local tool registry built around a stronger contract:
+⁂ astools is a local tool registry built around a stronger contract:
 
 > A tool is a self-describing package. The same manifest defines what the model
 > may ask for, what the runtime will validate and what the host may authorize.
@@ -15,18 +15,24 @@ astools is a local tool registry built around a stronger contract:
 The registry turns model intent into a small, typed action language and turns
 execution back into structured evidence.
 
-## 2. Place in Asterism
+This is the action layer of a general-purpose workflow and automation harness.
+Coding packages specialize the same contracts used for other domains. The
+registry is local and model-independent: SLMs, larger models and local or remote
+inference can all use its contracts through a host. See the central
+[architecture decisions and system value](https://github.com/gslf/asterism-asngn/blob/main/docs/ARCHITECTURE.md).
+
+## 2. Place in ⁂ asterism
 
 The four projects divide responsibilities as follows:
 
-- **asmodel** runs model providers.
-- **Asper** owns durable memory and bounded context.
-- **astools** owns tool discovery, contracts, policy and execution.
-- **asngn** decides when a tool is needed and evaluates its outcome.
+- **⁂ asmodel** runs model providers.
+- **⁂ asper** owns durable memory and bounded context.
+- **⁂ astools** owns tool discovery, contracts, policy and execution.
+- **⁂ asngn** decides when a tool is needed and evaluates its outcome.
 
-astools does not decide an agent plan and does not trust a model's claim that an
+⁂ astools does not decide an agent plan and does not trust a model's claim that an
 action succeeded. It validates and executes a requested operation, then returns
-the actual result for asngn to judge and, when useful, Asper to retain.
+the actual result for ⁂ asngn to judge and, when useful, ⁂ asper to retain.
 
 ## 3. A tool is one package
 
@@ -96,7 +102,7 @@ The compact native action syntax is one line:
 CALL code.read-range {path: "src/main.c", start: 40, end: 90}
 ```
 
-The response is a structured `RESULT` or `ERROR`. astools generates GBNF for the
+The response is a structured `RESULT` or `ERROR`. ⁂ astools generates GBNF for the
 native syntax and JSON Schema for MCP clients from the same manifests. Grammar
 constraining makes syntactically impossible actions unreachable during decoding,
 while runtime validation remains the authority for semantics and permissions.
@@ -107,7 +113,7 @@ The policy is deny by default. A manifest requests capabilities; the host grants
 capabilities; the effective permission set is their intersection. A tool cannot
 grant itself authority by editing its description.
 
-Before spawning any executable, astools:
+Before spawning any executable, ⁂ astools:
 
 - canonicalizes paths and checks them against workspace grants;
 - rejects traversal and out-of-scope access;
@@ -122,7 +128,7 @@ facilities where the operating system provides them. Capability reporting is
 honest: the API reports the enforcement actually active on the platform rather
 than claiming a portable sandbox is stronger than it is.
 
-Potentially destructive operations remain visible to asngn, which can require
+Potentially destructive operations remain visible to ⁂ asngn, which can require
 human confirmation before invocation.
 
 ## 8. Semantic tools for software work
@@ -144,7 +150,7 @@ interpret unstructured output just to run a test suite.
 
 ## 9. Performance strategy
 
-astools is designed to keep registry and invocation overhead below the work a
+⁂ astools is designed to keep registry and invocation overhead below the work a
 tool performs:
 
 - manifests are parsed and validated during scan, not for every call;
@@ -164,7 +170,7 @@ validation boundary.
 ## 10. Token economy
 
 Tool integration can consume more tokens describing and repeating tools than
-executing the user's task. astools controls that cost structurally:
+executing the user's task. ⁂ astools controls that cost structurally:
 
 - catalog levels disclose only the detail needed at the current planning stage;
 - a global character budget bounds prompt footprint;
@@ -176,8 +182,8 @@ executing the user's task. astools controls that cost structurally:
   large ambiguous failure transcript;
 - output caps keep a verbose subprocess from consuming the next model context.
 
-When a valid result is still large, asngn keeps a short digest in context and
-stores the exact payload as an Asper object. astools does not silently truncate
+When a valid result is still large, ⁂ asngn keeps a short digest in context and
+stores the exact payload as an ⁂ asper object. ⁂ astools does not silently truncate
 success evidence and pretend nothing was omitted; it reports limits explicitly
 so the harness can preserve and reopen the source.
 
@@ -185,7 +191,7 @@ so the harness can preserve and reopen the source.
 
 Small models are less reliable when they must remember tool syntax, choose among
 dozens of similar commands and recover from permissive but surprising APIs.
-astools externalizes those difficulties:
+⁂ astools externalizes those difficulties:
 
 1. A compact catalog narrows tool selection.
 2. Types and examples make valid arguments easier to construct.

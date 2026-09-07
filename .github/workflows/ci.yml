@@ -51,6 +51,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Configure
         run: cmake -B build -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_BUILD_TYPE=Release
       - name: Build
@@ -65,6 +67,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Configure
         run: cmake -B build -DCMAKE_C_COMPILER=clang -DASTOOLS_SANITIZERS=ON
       - name: Build

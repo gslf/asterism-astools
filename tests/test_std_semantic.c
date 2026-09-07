@@ -232,14 +232,16 @@ TEST(project_test_reports_real_collection) {
   snprintf(config_path, sizeof config_path, "%s/grant.xcdn", ws);
   snprintf(config, sizeof config,
       "#astools_config {registry:{paths:[{path:\"%s\",trust:\"standard\"}],watch:\"off\",pinning:\"off\"},"
-      "workspace:{root:\"%s\"},grants:{workspace_access:\"read-write\",tools:[{tool:\"project\",proc:true}]}}",
-      ASTOOLS_STD_PACKAGES, ws);
+      "sandbox:{executable_paths:[\"%s\"]},workspace:{root:\"%s\"},grants:{workspace_access:\"read-write\",tools:[{tool:\"project\",proc:true}]}}",
+      ASTOOLS_STD_PACKAGES, ASTOOLS_TEST_CMAKE_BIN, ws);
   ASSERT_TRUE(write_text(config_path, config));
   op.config_path = config_path;
   ASSERT_OK(astools_open(&op, &c));
   for (i = 0; i < 3; i++) {
     ASSERT_TRUE(write_text(path, variants[i]));
     ASSERT_OK(astools_invoke(c, "project", "test", "{}", 0, &r));
+    if (!r.ok) fprintf(stderr, "project.test: %s: %s\n",
+        r.error_code ? r.error_code : "", r.error_message ? r.error_message : "");
     ASSERT_EQ_INT(r.ok, 1);
     ASSERT_TRUE(r.result_xcdn != NULL);
     if (i == 0 && !strstr(r.result_xcdn, "\"passed\"")) fprintf(stderr, "%s\n", r.result_xcdn);

@@ -252,6 +252,7 @@ static int decorate_modern_result(jx_value *result) {
     return -1;
   }
   bad |= jx_object_set(info, "name", jx_string("astools-mcp"));
+  bad |= jx_object_set(info, "title", jx_string("astools"));
   bad |= jx_object_set(info, "version", jx_string(ASTOOLS_VERSION));
   bad |= jx_object_set(meta, "io.modelcontextprotocol/serverInfo", info);
   bad |= jx_object_set(result, "resultType", jx_string("complete"));
@@ -311,7 +312,7 @@ static jx_value *err_data(astools_err e) {
   return d;
 }
 
-/* Engine failure (≠ tool failure): JSON-RPC error with the astools
+/* Engine failure (≠ tool failure): JSON-RPC error with the ⁂ astools
  * error name in data. */
 static void reply_engine_error(mcp_server *s, const jx_value *id,
                                astools_err e) {
@@ -583,6 +584,7 @@ static void handle_initialize(const jx_value *id, const jx_value *params) {
   bad |= jx_object_set(caps, "tools", tools);
   bad |= jx_object_set(result, "capabilities", caps);
   bad |= jx_object_set(info, "name", jx_string("astools-mcp"));
+  bad |= jx_object_set(info, "title", jx_string("astools"));
   bad |= jx_object_set(info, "version", jx_string(ASTOOLS_VERSION));
   bad |= jx_object_set(result, "serverInfo", info);
   if (bad) {

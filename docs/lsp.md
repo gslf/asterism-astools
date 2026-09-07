@@ -1,6 +1,6 @@
 # Optional semantic navigation with clangd
 
-Astools can manage an LSP 3.17 process through the same admission queues,
+⁂ astools can manage an LSP 3.17 process through the same admission queues,
 package validation, sandbox and cancellation paths as persistent tools. The first
 profile supports C/C++ with clangd. It is optional: `code.search-symbol` remains a
 bounded identifier text search, and `code.read-range` works without a server.
@@ -18,7 +18,7 @@ without NUL, no larger than 1 MiB.
 | `clangd.references` | Server references, including declarations |
 | `clangd.diagnostics` | Published diagnostics for the exact opened document version |
 
-MCP names use underscores, for example `clangd_definition`. Ordinary Astools
+MCP names use underscores, for example `clangd_definition`. Ordinary ⁂ astools
 invocation uses tool `clangd`, command `definition`.
 
 ## Assemble and enable locally
@@ -89,7 +89,7 @@ must not be cached using only the source hash while dependencies can change.
 ## Lifecycle and validation
 
 `runtime.protocol: "lsp"` is valid only for executable persistent tools. Omitting
-it selects the existing Astools protocol. The manifest parser requires the closed
+it selects the existing ⁂ astools protocol. The manifest parser requires the closed
 command names, read-only annotations and exact required argument types. Discovery,
 JSON Schema export and invocation use that same manifest.
 

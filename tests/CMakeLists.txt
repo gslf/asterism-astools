@@ -1,4 +1,4 @@
-# tests/CMakeLists.txt — astools unit + integration tests.
+# tests/CMakeLists.txt — ⁂ astools unit + integration tests.
 #
 # Every test_*.c is a standalone executable over astools_static (+xcdn).
 # test_json uses the shared transport codec; test_regex compiles
@@ -98,6 +98,9 @@ set_tests_properties(${ASTOOLS_TESTS} PROPERTIES
 
 # ── std-tool containment regressions (need the real astools-std packages) ────
 if(ASTOOLS_BUILD_STD)
+  # The child environment does not inherit PATH; explicitly admit the test toolchain.
+  get_filename_component(ASTOOLS_CMAKE_BIN "${CMAKE_COMMAND}" DIRECTORY)
+  set(ASTOOLS_TEST_CMAKE_BIN "${ASTOOLS_CMAKE_BIN}" CACHE PATH "CMake/CTest directory for project fixtures")
   add_executable(test_std_semantic test_std_semantic.c)
   target_include_directories(test_std_semantic PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -106,7 +109,8 @@ if(ASTOOLS_BUILD_STD)
     ${CMAKE_CURRENT_SOURCE_DIR}/../deps/xcdn-c/src)
   target_compile_options(test_std_semantic PRIVATE ${ASTOOLS_C_FLAGS})
   target_compile_definitions(test_std_semantic PRIVATE
-    "ASTOOLS_STD_PACKAGES=\"${CMAKE_BINARY_DIR}/packages\"")
+    "ASTOOLS_STD_PACKAGES=\"${CMAKE_BINARY_DIR}/packages\""
+    "ASTOOLS_TEST_CMAKE_BIN=\"${ASTOOLS_TEST_CMAKE_BIN}\"")
   target_link_libraries(test_std_semantic PRIVATE astools_static xcdn)
   add_dependencies(test_std_semantic astools_packages)
   add_test(NAME test_std_semantic COMMAND test_std_semantic)

@@ -1,4 +1,4 @@
-/* Real clangd: overloaded definitions and Unicode positions through Astools. */
+/* Real clangd: overloaded definitions and Unicode positions through ⁂ astools. */
 #include "astools_test.h"
 #include "lsp_fixture.h"
 static void semantic_case(const char *level) {

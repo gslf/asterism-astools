@@ -1,5 +1,5 @@
 /*
- * os_proc_win32.c — Win32 backend of the astools process/path extension
+ * os_proc_win32.c — Win32 backend of the ⁂ astools process/path extension
  * of os.h: stat/realpath helpers, directory walks, child processes over
  * three pipes inside a Job Object, LoadLibrary.
  *

@@ -1,6 +1,6 @@
 # Persistent tool runtime
 
-An executable with `runtime.mode: "persistent"` uses the ordered Astools line
+An executable with `runtime.mode: "persistent"` uses the ordered ⁂ astools line
 protocol by default. `runtime.protocol: "mcp"` selects the
 [reviewed stdio client](mcp-client.md), whose discovery and result protocol is
 distinct from native `#tool_hello` exchanges. `runtime.protocol: "lsp"` selects the optional
