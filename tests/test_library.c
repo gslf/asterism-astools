@@ -1,6 +1,6 @@
 /* Loading a real library must not bypass package identity or response correlation. */
-#include "astools_internal.h"
 #include "astools_test.h"
+#include "astools_internal.h"
 #include "fakes.h"
 
 typedef struct {

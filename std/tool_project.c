@@ -29,7 +29,7 @@ extern char **environ;
 #define PROJECT_MAX_STEPS 3
 
 typedef struct {
-  char *argv[9];
+  char *argv[10]; /* CTest configuration + JUnit path + terminating NULL. */
 } project_step;
 
 static char *path_join(const char *dir, const char *leaf) {
@@ -232,7 +232,8 @@ static void run_action(astd_req *r, const char *action) {
     if (!report) goto oom;
     (void)remove(report);
     if (!strcmp(adapter, "cmake")) {
-      steps[2].argv[5] = "--output-junit"; steps[2].argv[6] = report;
+      /* Keep the configuration selected by cmake_steps when adding the report. */
+      steps[2].argv[7] = "--output-junit"; steps[2].argv[8] = report;
     } else {
       steps[0].argv[3] = "-o"; steps[0].argv[4] = "addopts=";
       steps[0].argv[5] = "--junitxml"; steps[0].argv[6] = report;

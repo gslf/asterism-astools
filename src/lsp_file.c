@@ -1,4 +1,8 @@
 /* Runtime-internal reads obey effective grants and never follow path aliases. */
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+/* _XOPEN_SOURCE hides O_NOFOLLOW and struct stat's timespec fields on Darwin. */
+#define _DARWIN_C_SOURCE 1
+#endif
 #include "lsp.h"
 #ifndef _WIN32
 #include <errno.h>

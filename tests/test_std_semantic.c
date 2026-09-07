@@ -220,11 +220,15 @@ TEST(project_test_reports_real_collection) {
   astools_open_params op = {0};
   astools_ctx *c = NULL;
   astools_result r = {0};
+  /* Restrict collection to Release even with a single-config generator: losing
+   * CTest's -C while adding the JUnit report must fail on every CI platform. */
   const char *variants[] = {
-    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true)\n",
-    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true)\nset_tests_properties(ok PROPERTIES DISABLED TRUE)\n",
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true CONFIGURATIONS Release)\n",
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME ok COMMAND ${CMAKE_COMMAND} -E true CONFIGURATIONS Release)\nset_tests_properties(ok PROPERTIES DISABLED TRUE)\n",
+    "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\nadd_test(NAME fails COMMAND ${CMAKE_COMMAND} -E false CONFIGURATIONS Release)\n",
     "cmake_minimum_required(VERSION 3.16)\nproject(proofs NONE)\nenable_testing()\n"
   };
+  const char *statuses[] = {"passed", "not_run", "failed", "failed"};
   size_t i;
   ASSERT_TRUE(astools_test_tmpdir(ws));
   for (i = 0; ws[i]; i++) if (ws[i] == '\\') ws[i] = '/';
@@ -237,16 +241,35 @@ TEST(project_test_reports_real_collection) {
   ASSERT_TRUE(write_text(config_path, config));
   op.config_path = config_path;
   ASSERT_OK(astools_open(&op, &c));
-  for (i = 0; i < 3; i++) {
+  for (i = 0; i < sizeof variants / sizeof *variants; i++) {
     ASSERT_TRUE(write_text(path, variants[i]));
     ASSERT_OK(astools_invoke(c, "project", "test", "{}", 0, &r));
     if (!r.ok) fprintf(stderr, "project.test: %s: %s\n",
         r.error_code ? r.error_code : "", r.error_message ? r.error_message : "");
     ASSERT_EQ_INT(r.ok, 1);
     ASSERT_TRUE(r.result_xcdn != NULL);
-    if (i == 0 && !strstr(r.result_xcdn, "\"passed\"")) fprintf(stderr, "%s\n", r.result_xcdn);
-    if (i == 0) ASSERT_TRUE(strstr(r.result_xcdn, "\"passed\"") != NULL);
-    else ASSERT_TRUE(strstr(r.result_xcdn, "\"passed\"") == NULL);
+    xcdn_document_t *doc = xcdn_parse(r.result_xcdn, NULL);
+    ASSERT_TRUE(doc && doc->values_len == 1);
+    const xcdn_node_t *status = xcdn_object_get(doc->values[0]->value, "verification_status");
+    ASSERT_TRUE(status && status->value->type == XCDN_VAL_STRING);
+    if (i == 1) {
+      /* CTest versions differ on whether --no-tests=error rejects a collection
+       * containing only disabled tests; neither outcome may claim success. */
+      ASSERT_TRUE(!strcmp(status->value->data.string, "not_run") ||
+                  !strcmp(status->value->data.string, "failed"));
+    } else {
+      if (strcmp(status->value->data.string, statuses[i])) fprintf(stderr, "%s\n", r.result_xcdn);
+      ASSERT_EQ_STR(status->value->data.string, statuses[i]);
+    }
+    if (i < 3) {
+      const xcdn_node_t *collected = xcdn_object_get(doc->values[0]->value, "tests_collected");
+      const xcdn_node_t *skipped = xcdn_object_get(doc->values[0]->value, "tests_skipped");
+      ASSERT_TRUE(collected && collected->value->type == XCDN_VAL_INT);
+      ASSERT_TRUE(skipped && skipped->value->type == XCDN_VAL_INT);
+      ASSERT_EQ_INT(collected->value->data.integer, 1);
+      ASSERT_EQ_INT(skipped->value->data.integer, i == 1 ? 1 : 0);
+    }
+    xcdn_document_free(doc);
     astools_result_free(&r);
   }
   astools_close(c); astools_test_rmtree(ws);
